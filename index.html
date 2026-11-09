@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Image compression and morphology, step by step</title>
+<script>try{var t=JSON.parse(localStorage.getItem("cm:theme"));if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<style>
+/* Palette: kept from the original page. Red = the page's identity and the one action that moves you on.
+   Blue = learning notes and object pixels. Orange = the structuring element. Amber = the pixel being decided. */
+:root{
+ --bg:#f6f5f1;--surface:#fff;--soft:#eef0f4;--ink:#1d2433;--mute:#586174;--line:#d9dde5;--line-2:#b8bfcc;
+ --acc:#b4232a;--on-acc:#fff;--acc-soft:#f7e4e4;--focus:#1b4fb3;--code:#1b4fb3;
+ --new:#d4f0dc;--new-ink:#14532d;
+ --obj:#2b63b0;--on-obj:#fff;--win:#d9480f;--win-soft:rgb(217 72 15/.13);--cur:#b98000;
+ --shadow:0 1px 2px rgb(20 24 36/.06),0 10px 30px rgb(20 24 36/.10);
+ --ease-out:cubic-bezier(.23,1,.32,1);--ease-io:cubic-bezier(.65,0,.35,1);
+ --sans:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
+ --serif:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
+ --mono:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;
+ color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+ --bg:#11141b;--surface:#191e29;--soft:#232a39;--ink:#e7eaf1;--mute:#a3acbd;--line:#2f3647;--line-2:#4a5468;
+ --acc:#ff7b7b;--on-acc:#2a0b0d;--acc-soft:#3b2027;--focus:#8ab4ff;--code:#8ab4ff;
+ --new:#1c4730;--new-ink:#d5f5df;--obj:#2f6fc0;--on-obj:#fff;--win:#ff8a4c;--win-soft:rgb(255 138 76/.16);--cur:#f0c400;
+ --shadow:0 1px 2px rgb(0 0 0/.35),0 12px 32px rgb(0 0 0/.4);color-scheme:dark}}
+:root[data-theme="dark"]{
+ --bg:#11141b;--surface:#191e29;--soft:#232a39;--ink:#e7eaf1;--mute:#a3acbd;--line:#2f3647;--line-2:#4a5468;
+ --acc:#ff7b7b;--on-acc:#2a0b0d;--acc-soft:#3b2027;--focus:#8ab4ff;--code:#8ab4ff;
+ --new:#1c4730;--new-ink:#d5f5df;--obj:#2f6fc0;--on-obj:#fff;--win:#ff8a4c;--win-soft:rgb(255 138 76/.16);--cur:#f0c400;
+ --shadow:0 1px 2px rgb(0 0 0/.35),0 12px 32px rgb(0 0 0/.4);color-scheme:dark}
+
+*,*::before,*::after{box-sizing:border-box}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%;scroll-padding-bottom:110px}
+body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);font:16px/1.6 var(--sans);-webkit-font-smoothing:antialiased}
+h1,h2,h3{text-wrap:balance}
+p{text-wrap:pretty}
+b,strong{font-weight:650}
+svg{display:block;flex:none}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.sr{position:absolute!important;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.skip{position:absolute;left:12px;top:-64px;z-index:50;padding:10px 14px;border-radius:8px;background:var(--ink);color:var(--surface);font-weight:600;text-decoration:none}
+.skip:focus{top:12px}
+
+/* Header */
+.top{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px 20px;padding:18px clamp(16px,3vw,32px) 16px;padding-top:max(18px,env(safe-area-inset-top));background:var(--surface);border-bottom:1px solid var(--line)}
+.brand{grid-row:1;grid-column:1;min-width:0}
+.bar{grid-row:1;grid-column:2;display:flex;align-items:center;gap:8px}
+.brand h1{margin:0;font:600 clamp(1.3rem,1.05rem + 1vw,1.75rem)/1.2 var(--serif);color:var(--acc);letter-spacing:-.01em}
+.brand p{margin:3px 0 0;color:var(--mute);font-size:.93rem}
+.top .menu{display:none}
+.grow{flex:1}
+@media (max-width:999px){.top .menu{display:inline-flex}}
+@media (max-width:719px){.top{grid-template-columns:minmax(0,1fr)}.bar{grid-column:1}.brand{grid-row:2}}
+@media (max-width:400px){.bar .btn .lbl{display:none}.bar .btn{width:44px;padding:0}}
+.link{padding:0;border:0;background:none;color:var(--code);font:inherit;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px;cursor:pointer}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 16px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);font:600 .94rem/1 var(--sans);white-space:nowrap;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation;transition:transform .14s var(--ease-out),background-color .15s ease,border-color .15s ease,color .15s ease,opacity .15s ease}
+.btn:active:not(:disabled){transform:scale(.97)}
+.btn:disabled{opacity:.38;cursor:default}
+.btn.icon{width:44px;padding:0}
+.btn.ghost{background:transparent;border-color:transparent}
+.btn.pri{background:var(--acc);border-color:var(--acc);color:var(--on-acc)}
+@media (hover:hover) and (pointer:fine){
+ .btn:not(:disabled):hover{background:var(--soft)}
+ .btn.pri:not(:disabled):hover{background:color-mix(in srgb,var(--acc) 86%,var(--ink))}
+ .tp:hover{background:var(--soft)}
+ .tp[aria-current="true"]:hover{background:var(--acc-soft)}
+ .chip:hover span{border-color:var(--line-2)}
+ .stg:hover{border-color:var(--line-2)}
+}
+
+/* Tooltips: shown after a short delay on hover, at once on keyboard focus */
+[data-tip]{position:relative}
+[data-tip]::after{content:attr(data-tip);position:absolute;left:50%;bottom:calc(100% + 8px);z-index:30;padding:5px 9px;border-radius:7px;background:var(--ink);color:var(--surface);font:500 .78rem/1.35 var(--sans);white-space:nowrap;pointer-events:none;opacity:0;visibility:hidden;transform:translate(-50%,3px);transition:opacity .14s ease,transform .14s var(--ease-out),visibility 0s linear .14s}
+@media (hover:hover) and (pointer:fine){[data-tip]:hover::after{opacity:1;visibility:visible;transform:translate(-50%,0);transition-delay:.35s,.35s,0s}}
+[data-tip]:focus-visible::after,[data-tip]:has(input:focus-visible)::after{opacity:1;visibility:visible;transform:translate(-50%,0);transition-delay:0s}
+.top [data-tip]::after{top:calc(100% + 8px);bottom:auto}
+
+/* Segmented control and chips (native radios underneath) */
+.seg{display:inline-flex;gap:2px;padding:3px;background:var(--soft);border:1px solid var(--line);border-radius:11px}
+.seg label{position:relative;display:flex}
+.seg input,.chip input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}
+.seg label>span{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-width:36px;min-height:36px;padding:0 11px;border-radius:8px;color:var(--mute);font-size:.88rem;font-weight:550;white-space:nowrap;transition:background-color .16s ease,color .16s ease,box-shadow .16s ease}
+.seg input:checked+span{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgb(0 0 0/.14),0 0 0 1px var(--line)}
+.seg input:focus-visible+span,.chip input:focus-visible+span{outline:2px solid var(--focus);outline-offset:2px}
+.seg input:disabled,.chip input:disabled{cursor:default}
+.seg input:disabled+span{opacity:.45}
+.seg input:checked:disabled+span{opacity:1}
+.theme label>span{padding:0}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{position:relative;display:inline-flex}
+.chip span{display:inline-flex;align-items:center;min-height:38px;padding:0 13px;border:1px solid var(--line);border-radius:9px;background:var(--surface);color:var(--ink);font-size:.9rem;font-weight:550;transition:background-color .15s ease,border-color .15s ease,color .15s ease}
+.chip input:checked+span{background:var(--ink);border-color:var(--ink);color:var(--surface)}
+@media (pointer:coarse){.seg label>span{min-width:40px;min-height:40px}.chip span{min-height:44px}}
+
+/* Layout */
+.shell{display:grid;grid-template-columns:minmax(0,1fr);max-width:1280px;margin:0 auto}
+.side{display:none}
+@media (min-width:1000px){
+ .shell{grid-template-columns:280px minmax(0,1fr)}
+ .side{display:block;position:sticky;top:0;align-self:start;max-height:100vh;overflow-y:auto;padding:22px 14px 28px 18px;border-right:1px solid var(--line);scrollbar-width:thin}
+}
+main{width:100%;min-width:0;max-width:900px;margin:0 auto;padding:24px clamp(16px,3.2vw,44px) 56px}
+
+/* Topic list with progress rings */
+.tl-h{margin:0 0 6px;padding:0 10px;font-size:.8rem;font-weight:650;color:var(--mute)}
+.tl{display:grid;gap:2px;margin:0 0 20px;padding:0;list-style:none}
+.tp{display:flex;align-items:center;gap:11px;width:100%;min-height:40px;padding:7px 10px;border:0;border-radius:9px;background:transparent;color:var(--ink);font:inherit;font-size:.92rem;line-height:1.3;text-align:left;cursor:pointer;transition:background-color .15s ease}
+.tp[aria-current="true"]{background:var(--acc-soft);font-weight:650}
+@media (pointer:coarse){.tp{min-height:44px}}
+.rw{display:flex;flex:none}
+.ring{width:18px;height:18px;border-radius:50%;background:conic-gradient(var(--acc) calc(var(--p,0) * 1turn),var(--line) 0);-webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 3.5px),#000 calc(100% - 3px));mask:radial-gradient(farthest-side,transparent calc(100% - 3.5px),#000 calc(100% - 3px))}
+.ring.done{display:grid;place-items:center;background:var(--acc);color:var(--on-acc);-webkit-mask:none;mask:none}
+.clr{margin:0 10px;font-size:.85rem}
+
+/* Lesson */
+.crumb{margin:0 0 2px;font-size:.86rem;color:var(--mute)}
+.tt{margin:0 0 16px;font:600 clamp(1.55rem,1.2rem + 1.5vw,2.15rem)/1.15 var(--serif);letter-spacing:-.015em}
+.tt.sm{margin-bottom:4px;font-size:clamp(1.3rem,1.1rem + .9vw,1.6rem)}
+.concept{display:grid;gap:10px;margin:0 0 14px}
+@media (min-width:700px){.concept{grid-template-columns:1fr 1fr}}
+.concept p{margin:0;padding:12px 15px;background:var(--surface);border:1px solid var(--line);border-radius:12px;font-size:.94rem;line-height:1.55}
+.concept p>b:first-child{display:block;margin-bottom:3px;font-size:.8rem;color:var(--code)}
+.given{margin:0 0 14px;padding:13px 16px;background:var(--surface);border:1px solid var(--line);border-radius:12px}
+.lbl-k{margin:0 0 2px;font-size:.8rem;font-weight:650;color:var(--mute)}
+.given p{margin:.3em 0}
+.gt>:first-child{margin-top:0}
+.gt>:last-child{margin-bottom:0}
+pre{display:inline-block;max-width:100%;margin:6px 0;padding:10px 14px;overflow-x:auto;border-radius:8px;background:var(--soft);color:var(--ink);font:.86rem/1.5 var(--mono)}
+.m{padding:1px 6px;border-radius:5px;background:var(--soft);font-family:var(--mono);font-size:.88em;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+
+/* Worksheet table */
+.sheet{margin:0 0 14px;overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:12px;-webkit-overflow-scrolling:touch}
+.sheet table{width:100%;min-width:560px;border-collapse:separate;border-spacing:0;font-variant-numeric:tabular-nums}
+.sheet th,.sheet td{height:46px;padding:8px 10px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);text-align:center;font-size:.93rem;line-height:1.35}
+.sheet tr>:last-child{border-right:0}
+.sheet tbody tr:last-child>*{border-bottom:0}
+.sheet thead th{background:var(--soft);font-size:.83rem;font-weight:650;vertical-align:bottom}
+.sheet tbody th{position:sticky;left:0;z-index:1;background:var(--surface);text-align:left;font-weight:600}
+.sheet thead th:first-child{position:sticky;left:0;z-index:2;text-align:left}
+.sheet td.todo>span{display:inline-block;width:2.4em;border-bottom:2px dotted var(--line-2);vertical-align:middle}
+.sheet td.new{background:var(--new);color:var(--new-ink);font-weight:650}
+.sheet td.new>span{animation:fadein .26s var(--ease-out) both}
+.sheet tr.sum>*{box-shadow:inset 0 1px 0 var(--line-2);font-weight:650}
+@keyframes fadein{from{opacity:0}}
+
+/* Step explanation and the floating step bar */
+.step{margin:0 0 12px;padding:16px 18px 14px;background:var(--surface);border:1px solid var(--line);border-radius:12px}
+.step .k{margin:0;font-size:.84rem;color:var(--mute);font-variant-numeric:tabular-nums}
+.step h3{margin:2px 0 6px;font:600 1.2rem/1.3 var(--serif)}
+.step p{margin:.5em 0}
+.step p:last-child{margin-bottom:0}
+.dock{position:sticky;bottom:max(12px,env(safe-area-inset-bottom));z-index:6;display:flex;align-items:center;gap:8px;padding:8px;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
+.track{display:flex;flex:1;flex-direction:column;align-items:center;min-width:0}
+.dots{display:flex;justify-content:center;width:100%}
+.dot{display:flex;flex:1 1 0;align-items:center;max-width:52px;height:32px;padding:0 2px;border:0;border-radius:6px;background:none;cursor:pointer}
+.dot::before{content:"";flex:1;height:6px;border-radius:3px;background:var(--line);transition:background-color .2s ease,transform .2s var(--ease-out)}
+.dot.past::before{background:color-mix(in srgb,var(--acc) 42%,var(--line))}
+.dot[aria-current="step"]::before{background:var(--acc);transform:scaleY(1.4)}
+.cnt{margin:0;font-size:.8rem;color:var(--mute);font-variant-numeric:tabular-nums;white-space:nowrap}
+kbd{padding:2px 5px;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;background:var(--bg);color:var(--mute);font:600 .72rem/1 var(--sans)}
+.keys{display:none}
+@media (hover:hover) and (pointer:fine) and (min-width:700px){.keys{display:inline}}
+@media (max-width:560px){.dock{gap:6px;padding:6px}.dot{height:40px}}
+
+/* Demo */
+.demo{margin-top:40px;padding-top:28px;border-top:1px solid var(--line)}
+.lead{max-width:64ch;margin:0 0 16px;color:var(--mute)}
+.ctl{display:grid;gap:16px;padding:16px;background:var(--surface);border:1px solid var(--line);border-radius:12px}
+.fl{margin:0 0 7px;font-size:.82rem;font-weight:650;color:var(--mute)}
+.ops{display:flex;flex-wrap:wrap;gap:10px 18px}
+.cg{display:flex;flex-direction:column;gap:5px}
+.cgl{font-size:.76rem;color:var(--mute)}
+.opd{margin:8px 0 0;font-size:.88rem;color:var(--mute)}
+.opd:empty{display:none}
+.row2{display:flex;flex-wrap:wrap;gap:16px 28px}
+.segrow{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.hint{align-self:center;margin-left:4px;font-size:.8rem;color:var(--mute)}
+.sg{display:inline-grid;grid-template-columns:repeat(3,5px);gap:1.5px}
+.sg i{width:5px;height:5px;border-radius:1.5px;background:var(--line-2)}
+.sg i.on{background:var(--win)}
+.player{margin:14px 0;padding:14px 16px 12px;background:var(--surface);border:1px solid var(--line);border-radius:12px}
+.stages{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 8px}
+.stg{display:inline-flex;align-items:center;gap:8px;min-height:34px;padding:0 12px 0 5px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--mute);font:550 .85rem/1.2 var(--sans);text-align:left;cursor:pointer;transition:border-color .15s ease,color .15s ease}
+.stg b{display:grid;place-items:center;flex:none;width:24px;height:24px;border-radius:50%;background:var(--soft);color:var(--ink);font-size:.76rem;font-weight:700}
+.stg.done b{background:var(--obj);color:var(--on-obj)}
+.stg[aria-current="step"]{border-color:var(--ink);color:var(--ink)}
+.stg[aria-current="step"] b{background:var(--ink);color:var(--surface)}
+@media (pointer:coarse){.stg{min-height:44px}}
+.sep{color:var(--line-2)}
+.transport{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:4px}
+.play{min-width:108px}
+.speed{display:flex;align-items:center;gap:8px;margin-left:auto;font-size:.8rem;color:var(--mute)}
+.speed input{width:110px}
+
+/* Sliders */
+input[type=range]{--rc:var(--acc);--fill:0%;width:100%;height:30px;margin:0;background:transparent;cursor:pointer;-webkit-appearance:none;appearance:none}
+input[type=range].quiet{--rc:var(--mute)}
+input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:3px;background:linear-gradient(var(--rc),var(--rc)) 0/var(--fill) 100% no-repeat,var(--line)}
+input[type=range]::-webkit-slider-thumb{width:20px;height:20px;margin-top:-7px;border:2px solid var(--rc);border-radius:50%;background:var(--surface);box-shadow:0 1px 3px rgb(0 0 0/.22);-webkit-appearance:none;transition:transform .14s var(--ease-out)}
+input[type=range]:active::-webkit-slider-thumb{transform:scale(1.12)}
+input[type=range]::-moz-range-track{height:6px;border-radius:3px;background:var(--line)}
+input[type=range]::-moz-range-progress{height:6px;border-radius:3px;background:var(--rc)}
+input[type=range]::-moz-range-thumb{width:16px;height:16px;border:2px solid var(--rc);border-radius:50%;background:var(--surface)}
+input[type=range]:focus-visible{outline:2px solid var(--focus);outline-offset:3px;border-radius:6px}
+
+/* Pixel grids. The orange SE frame is one element moved with transform, so it glides between pixels. */
+.grids{--cell:34px;--gap:3px;display:flex;flex-wrap:wrap;align-items:flex-start;gap:18px 24px;margin:4px 0 14px}
+.gp{min-width:0;margin:0}
+.gp figcaption{max-width:42ch;margin:0 0 6px;font-size:.84rem;color:var(--mute);font-variant-numeric:tabular-nums}
+.gw{position:relative;display:inline-block}
+.gw.pad{padding:calc(var(--cell) + var(--gap))}
+.grids.stack .gw.pad.out{padding:0}
+.g{display:grid;grid-template-columns:repeat(var(--w),var(--cell));grid-auto-rows:var(--cell);gap:var(--gap)}
+.g i{display:grid;place-items:center;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--mute);font-size:max(10px,calc(var(--cell) * .38));font-style:normal;font-weight:500;line-height:1;font-variant-numeric:tabular-nums;transition:background-color .2s ease,color .2s ease,border-color .2s ease}
+.g i.one{background:var(--obj);border-color:var(--obj);color:var(--on-obj)}
+.g i.h{background:transparent;border-style:dashed;color:transparent}
+.g i.cur{position:relative;z-index:1;box-shadow:0 0 0 2px var(--bg),0 0 0 5px var(--cur)}
+.se{position:absolute;left:0;top:0;z-index:2;display:grid;grid-template-columns:repeat(var(--sw),var(--cell));grid-auto-rows:var(--cell);gap:var(--gap);pointer-events:none;transform:translate(calc(var(--c,1) * (var(--cell) + var(--gap))),calc(var(--r,1) * (var(--cell) + var(--gap))));transition:transform var(--slide,200ms) var(--ease-io)}
+.se.jump{transition:none}
+.se b{border-radius:5px}
+.se b.on{display:grid;place-items:center;border:2px solid var(--win);background:var(--win-soft);color:var(--mute);font-size:max(10px,calc(var(--cell) * .36));font-weight:600;line-height:1}
+.se b.ctr{border-width:4px}
+
+/* Explanation and legend */
+.explain{padding:15px 18px;background:var(--surface);border:1px solid var(--line);border-radius:12px}
+.explain h3{margin:0 0 4px;font:600 1.08rem/1.3 var(--serif)}
+.explain p{margin:.45em 0}
+.explain p:last-child{margin-bottom:0}
+.calc{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:10px 0;font-size:.84rem;color:var(--mute)}
+.mini{display:inline-flex;flex-wrap:wrap;gap:3px}
+.mc{display:grid;place-items:center;width:28px;height:28px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--mute);font-size:.8rem;font-style:normal;font-weight:600;line-height:1;font-variant-numeric:tabular-nums}
+.mc.one{background:var(--obj);border-color:var(--obj);color:var(--on-obj)}
+.mc.res{box-shadow:0 0 0 2px var(--surface),0 0 0 4px var(--cur)}
+.legend{display:flex;flex-wrap:wrap;gap:10px 20px;margin:14px 0 0;padding:0;list-style:none;font-size:.84rem;color:var(--mute)}
+.legend li{display:flex;align-items:center;gap:8px}
+.sw{flex:none;width:20px;height:20px;border:1px solid var(--line);border-radius:5px;background:var(--surface)}
+.sw.obj{background:var(--obj);border-color:var(--obj)}
+.sw.win{border:2px solid var(--win);background:var(--win-soft)}
+.sw.ctr{border:4px solid var(--win);background:var(--win-soft)}
+.sw.cur{box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--cur)}
+.sw.h{border-style:dashed;background:transparent}
+.note{margin:8px 0 0;font-size:.84rem;color:var(--mute)}
+
+/* Drawers (native dialog: Escape closes, focus stays inside) */
+dialog{padding:0;border:0;background:var(--surface);color:var(--ink)}
+dialog::backdrop{background:rgb(10 12 18/.5)}
+.drawer{width:min(440px,100vw);max-width:100vw;height:100%;max-height:100%;margin:0 0 0 auto;border-left:1px solid var(--line);box-shadow:-20px 0 50px rgb(0 0 0/.18)}
+.drawer.left{width:min(340px,88vw);margin:0 auto 0 0;border-left:0;border-right:1px solid var(--line)}
+.drawer[open]{display:flex;flex-direction:column;animation:in-r .26s var(--ease-out)}
+.drawer.left[open]{animation-name:in-l}
+@keyframes in-r{from{opacity:0;transform:translateX(28px)}}
+@keyframes in-l{from{opacity:0;transform:translateX(-28px)}}
+.dh{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 10px 12px 20px;padding-top:max(12px,env(safe-area-inset-top));border-bottom:1px solid var(--line)}
+.dh h2{margin:0;font:600 1.2rem/1.2 var(--serif)}
+.db{flex:1;overflow-y:auto;padding:16px 20px 32px;padding-bottom:max(32px,env(safe-area-inset-bottom))}
+.drawer.left .db{padding:14px 10px 28px}
+.terms{margin:0}
+.terms dt{margin-top:16px;font-weight:650}
+.terms dt:first-child{margin-top:0}
+.terms dd{margin:3px 0 0;font-size:.95rem}
+
+@media (prefers-reduced-motion:reduce){
+ .se{transition:none}
+ .drawer[open]{animation:none}
+ .sheet td.new>span{animation:none}
+ .btn:active:not(:disabled){transform:none}
+ input[type=range]:active::-webkit-slider-thumb{transform:none}
+ .dot[aria-current="step"]::before{transition:background-color .2s ease}
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#lesson">Skip to the worked example</a>
+<header class="top">
+ <div class="bar">
+  <button type="button" class="btn menu" id="openTopics" aria-haspopup="dialog" data-ic="list"><span class="lbl">Topics</span></button>
+  <span class="grow"></span>
+  <button type="button" class="btn" id="openTerms" aria-haspopup="dialog" data-ic="book"><span class="lbl">Key terms</span></button>
+  <div class="seg theme" role="radiogroup" aria-label="Colour theme">
+   <label data-tip="Match my system"><input type="radio" name="theme" value="auto" aria-label="Match my system"><span data-ic="auto"></span></label>
+   <label data-tip="Light"><input type="radio" name="theme" value="light" aria-label="Light"><span data-ic="sun"></span></label>
+   <label data-tip="Dark"><input type="radio" name="theme" value="dark" aria-label="Dark"><span data-ic="moon"></span></label>
+  </div>
+ </div>
+ <div class="brand">
+  <h1>Compression and morphology, step by step</h1>
+  <p>Worked examples from Handout 3 (image compression) and Handout 4 (morphology). New to this? <button type="button" class="link" id="openTerms2">Read the key terms first</button>.</p>
+ </div>
+</header>
+
+<div class="shell">
+ <nav class="side" aria-label="Topics"><div id="sideList"></div></nav>
+ <main id="main">
+  <section class="lesson" id="lesson" tabindex="-1" aria-labelledby="ttl">
+   <p class="crumb" id="crumb"></p>
+   <h2 class="tt" id="ttl"></h2>
+   <div class="concept" id="w"></div>
+   <div class="given" id="g"></div>
+   <div class="sheet" role="region" aria-label="Worksheet" tabindex="0"><table id="t"></table></div>
+   <div class="step" id="p" aria-live="polite"><p class="k" id="sk"></p><h3 id="sh"></h3><div id="sx"></div></div>
+   <div class="dock" role="group" aria-label="Steps">
+    <button type="button" class="btn icon" id="prev" aria-label="Previous step" data-tip="Previous step" data-ic="l"></button>
+    <div class="track"><div class="dots" id="dots"></div><p class="cnt" id="cnt"></p></div>
+    <button type="button" class="btn icon ghost" id="reset" aria-label="Start over" data-tip="Start over" data-ic="restart"></button>
+    <button type="button" class="btn pri" id="next"></button>
+   </div>
+  </section>
+
+  <section class="demo" id="demo" hidden aria-labelledby="demoT">
+   <h2 class="tt sm" id="demoT">Watch the structuring element slide</h2>
+   <p class="lead">Press Play. The structuring element (SE) moves over the image one pixel at a time, and the output grid fills in. Pick any operation, image or SE below.</p>
+   <div class="ctl">
+    <div>
+     <p class="fl" id="dopl">Operation</p>
+     <div class="ops" id="dop" role="radiogroup" aria-labelledby="dopl"></div>
+     <p class="opd" id="dopd"></p>
+    </div>
+    <div class="row2">
+     <div><p class="fl" id="diml">Image</p><div class="chips" id="dim" role="radiogroup" aria-labelledby="diml"></div></div>
+     <div><p class="fl" id="dsel">Structuring element</p><div class="segrow"><div class="seg" id="dse" role="radiogroup" aria-labelledby="dsel"></div><span class="hint" id="dseh"></span></div></div>
+    </div>
+   </div>
+   <div class="player">
+    <div class="stages" id="dstages" role="group" aria-label="Stages"></div>
+    <input type="range" id="dscrub" min="0" max="0" value="0" aria-label="Position in the animation">
+    <div class="transport">
+     <button type="button" class="btn icon" id="dreset" aria-label="Start over" data-tip="Start over" data-ic="restart"></button>
+     <button type="button" class="btn icon" id="dback" aria-label="Back one step" data-tip="Back one step" data-ic="back"></button>
+     <button type="button" class="btn pri play" id="dplay"></button>
+     <button type="button" class="btn icon" id="dstep" aria-label="Forward one step" data-tip="Forward one step" data-ic="fwd"></button>
+     <span class="cnt" id="dcnt"></span>
+     <label class="speed"><span aria-hidden="true">Slow</span><input type="range" id="dspd" class="quiet" min="80" max="900" value="560" aria-label="Animation speed"><span aria-hidden="true">Fast</span></label>
+    </div>
+   </div>
+   <div class="grids" id="dgr"></div>
+   <div class="explain" id="dp" aria-live="polite"></div>
+   <ul class="legend">
+    <li><span class="sw obj"></span>1 (object)</li>
+    <li><span class="sw win"></span>Under the SE</li>
+    <li><span class="sw ctr"></span>SE centre</li>
+    <li><span class="sw cur"></span>Output pixel being decided</li>
+    <li><span class="sw h"></span>Not decided yet</li>
+   </ul>
+   <p class="note">Pixels outside the image count as 0 (for grey rows the edge value is repeated). When the SE hangs over the edge, those values show inside its orange frame.</p>
+  </section>
+ </main>
+</div>
+
+<dialog class="drawer left" id="topics" aria-labelledby="topicsT">
+ <div class="dh"><h2 id="topicsT">Topics</h2><button type="button" class="btn icon ghost" data-close aria-label="Close" data-ic="x"></button></div>
+ <div class="db" id="dlgList"></div>
+</dialog>
+
+<dialog class="drawer" id="terms" aria-labelledby="termsT">
+ <div class="dh"><h2 id="termsT">Key terms</h2><button type="button" class="btn icon ghost" data-close aria-label="Close" data-ic="x"></button></div>
+ <div class="db"><dl class="terms">
+<dt>Pixel</dt><dd>One tiny dot of a picture. A 10 × 10 image has 10 rows and 10 columns, so 10 × 10 = 100 pixels.</dd>
+<dt>Grey level (intensity)</dt><dd>How bright a pixel is. In a normal 8-bit image 0 is black and 255 is white.</dd>
+<dt>Bit and byte</dt><dd>A bit is the smallest piece of storage: a 0 or a 1. A byte is 8 bits.</dd>
+<dt>n-bit image</dt><dd>Every pixel is stored with n bits, so it can have 2ⁿ different grey levels. An 8-bit image allows 256 levels; a 5-bit image allows 32.</dd>
+<dt>Symbol</dt><dd>One value we need to write down, for example one grey level such as a2.</dd>
+<dt>Frequency and probability</dt><dd>Frequency = how many times a symbol appears. Probability = frequency ÷ total number of pixels. It is a number between 0 and 1, and all probabilities add up to 1.</dd>
+<dt>Code and codeword</dt><dd>The string of bits we write instead of the symbol, for example 011.</dd>
+<dt>Compression</dt><dd>Storing the same picture with fewer bits. <b>Lossless</b>: decoding gives back exactly the original. <b>Lossy</b>: some information is thrown away for ever.</dd>
+<dt>Binary image</dt><dd>An image with only two values: object (white, 255) and background (black, 0).</dd>
+</dl></div>
+</dialog>
+<script>
+var AG="<pre>0 0 0 0 0 0 0\n0 1 1 1 0 0 0\n0 1 1 1 0 0 0\n0 1 1 1 1 1 0\n0 0 0 1 1 1 0\n0 0 0 0 0 0 0\n0 0 0 0 0 1 0</pre>";
+var T=[
+/* ---------- Handout 3 ---------- */
+{n:"H3 · The three redundancies",g:"Goal: find what a raw image wastes. A raw image uses 8 bits for every pixel.",
+h:["Redundancy","Why it exists","Method that removes it"],
+r:[["Coding","Some grey levels are far more common than others@1","Huffman coding@1"],["Spatial (interpixel)","Neighbouring pixels are similar@2","RLE, prediction, DCT, wavelets@2"],["Psychovisual","The eye ignores some detail@3","Quantisation in JPEG@3"]],
+s:[["The blank worksheet","<p>Compression stores the same picture with fewer bits by removing <b>redundancy</b>. Lossless methods keep every pixel; lossy methods drop information for good. Fill in the three kinds, one per step.</p>"],
+["1. Coding redundancy","<p>Every pixel gets 8 bits, although common values could have shorter codes. For the coffee photo the entropy is 7.665 bits/pixel, so the waste is <span class='m'>1 − 7.665/8 = 4.2%</span>. Small here, because the grey levels are spread evenly.</p>"],
+["2. Spatial redundancy","<p>Subtract each pixel from its left neighbour. The differences are mostly near 0, and the entropy falls from 7.665 to <b>5.048 bits/pixel</b>. PNG uses this idea (prediction, then entropy coding) and reaches 5.08 bpp with no error.</p>"],
+["3. Psychovisual redundancy","<p>JPEG at quality 50 uses 0.80 bpp (10:1) and still gives 32 dB. Chroma subsampling 4:2:0 keeps only 50% of the samples and still gives 47.8 dB, because the eye is poor at colour detail.</p>"],
+["Putting it together","<p>Every coder has three parts: a <b>mapper</b> (removes spatial redundancy), a <b>quantiser</b> (removes what the eye will not miss) and a <b>symbol coder</b> (removes coding redundancy). Only the quantiser cannot be undone, so it is the only lossy step.</p>"]]},
+
+{n:"H3 · Entropy",g:"A 4 × 4 image: eight pixels of value 21, four of 95, two of 169, two of 243 (16 pixels).",
+h:["Grey level","Count","p = count/16","Ideal bits −log₂p","p × ideal","Code","Code length"],
+r:[["21","8","0.5@1","1@2","0.5@3","0@4","1@4"],["95","4","0.25@1","2@2","0.5@3","10@4","2@4"],["169","2","0.125@1","3@2","0.375@3","110@4","3@4"],["243","2","0.125@1","3@2","0.375@3","111@4","3@4"],["Total","16","1.0@1","","H = 1.75@3","","28 bits@4"]],
+s:[["The blank worksheet","<p>Entropy H is the lowest average number of bits per pixel that any code can reach when it codes each pixel on its own: <span class='m'>H = −Σ p log₂ p</span>.</p>"],
+["Step 1: probabilities","<p>p = count ÷ total: 8/16 = 0.5, 4/16 = 0.25, 2/16 = 0.125, 2/16 = 0.125. They add up to 1.</p>"],
+["Step 2: ideal bits for each level","<p>The ideal length is <span class='m'>−log₂ p</span>: think of it as the number of yes/no questions needed to identify the value. 21: p = 1/2, so <b>1 bit</b>. 95: p = 1/4, so <b>2 bits</b>. 169 and 243: p = 1/8, so <b>3 bits</b> each. Common values deserve short codes; rare values deserve long codes.</p>"],
+["Step 3: weight by probability and add","<p>Entropy is the average of the ideal lengths, weighted by how often each occurs: p × ideal = 0.5 × 1 = <b>0.5</b>, 0.25 × 2 = <b>0.5</b>, 0.125 × 3 = <b>0.375</b> (twice). Sum: <b>H = 1.75 bits/pixel</b>.</p>"],
+["Step 4: check with a real code","<p>A prefix code with exactly these lengths: 21 = 0, 95 = 10, 169 = 110, 243 = 111. Total bits = 8 × 1 + 4 × 2 + 2 × 3 + 2 × 3 = <b>28</b> = 16 × 1.75. The code reaches the entropy exactly because every probability is a power of ½. It decodes without separators: 0 10 110 111 can only be read as 21, 95, 169, 243.</p>"],
+["Step 5: compare and interpret","<p>Raw 8 bits each: 16 × 8 = <b>128 bits</b> (1:1). Fixed 2-bit code: <b>32 bits</b> (4:1). Entropy or Huffman: <b>28 bits</b> (about 4.6:1). Coding redundancy of the raw image: 1 − 1.75/8 ≈ 78%.</p><p>Entropy is a lower limit for any code that codes each pixel on its own. If all four values were equally likely, H = 2 bits (the maximum for four symbols). If every pixel were the same, H = 0. A real photo has grey levels spread almost evenly, so H = 7.665, only 4% below 8.</p>"]]},
+
+{n:"H3 · Compression ratio, MSE and PSNR",g:"Original block 100, 110, 120, 130. Decoded block 102, 108, 120, 134 (a lossy coder changed it).",
+h:["Pixel","Original","Decoded","Error = orig − dec","Error²"],
+r:[["1","100","102","−2@1","4@2"],["2","110","108","2@1","4@2"],["3","120","120","0@1","0@2"],["4","130","134","−4@1","16@2"],["Sum","","","","24@2"]],
+s:[["The blank worksheet","<p>For lossy methods we report size and quality together. Quality is measured by MSE and PSNR.</p>"],
+["Step 1: the error of each pixel","<p>Original minus decoded: −2, 2, 0, −4.</p>"],
+["Step 2: square and add","<p>Squares: 4, 4, 0, 16. Sum = <b>24</b>.</p>"],
+["Step 3: MSE","<p><span class='m'>MSE = 24 / 4 = 6</span>. MSE is the average squared error; 0 means no error.</p>"],
+["Step 4: PSNR","<p><span class='m'>PSNR = 10 log₁₀(255² / MSE) = 10 log₁₀(65025/6) ≈ 40.35 dB</span>. Above about 40 dB the error is very hard to see; below about 25 dB it is clearly visible.</p>"],
+["Step 5: size measures","<p>A 512 × 512 image (262 144 bytes) compressed to 32 768 bytes: <b>C = 262 144 / 32 768 = 8:1</b>; relative redundancy <b>R = 1 − 1/8 = 0.875</b>; <b>bpp = 8 × 32 768 / 262 144 = 1</b>.</p>"]]},
+
+{n:"H3 · Huffman coding",g:"<p>Example image: <b>10 × 10 = 100 pixels</b> (10 rows × 10 columns). It is a <b>5-bit image</b>: each pixel normally uses 5 bits, so 100 pixels need 500 bits. Five bits allow 2⁵ = 32 grey levels, but only <b>6 levels</b> (the symbols a1 to a6) actually occur.</p><p>How often each one occurs (its <b>frequency</b>): a2 = 40, a6 = 30, a1 = 10, a4 = 10, a3 = 6, a5 = 4 (total 100). <b>Goal:</b> give common symbols short codes and rare symbols long codes, so that the whole image needs fewer than 500 bits.</p>",
+h:["Symbol","Probability (sorted)","Reduction 1","Reduction 2","Reduction 3","Reduction 4","Code"],
+r:[["a2","0.4@1","0.4@2","0.4@3","0.4@4","0.6@5","1@6"],["a6","0.3@1","0.3@2","0.3@3","0.3@4","0.4@5","00@6"],["a1","0.1@1","0.1@2","0.2@3","0.3@4","","011@6"],["a4","0.1@1","0.1@2","0.1@3","","","0100@6"],["a3","0.06@1","0.1@2","","","","01010@6"],["a5","0.04@1","","","","","01011@6"],["Average length","","","","","","L = 2.2 bits@7"]],
+s:[["The blank worksheet","<p>Each row is a symbol. The columns are the working: first the <b>probabilities</b> (sorted from largest to smallest), then four <b>source reduction</b> columns. In source reduction you add the two smallest values into one, rewrite the list in sorted order, and repeat until only <b>two values are left</b>. Then you go backwards and assign 0s and 1s to get the codes.</p><p>Why this works: values that are merged first are the rarest, so they end up with the longest codes. Values merged last are the commonest, so they end up with the shortest codes.</p>"],
+["Step 1: probabilities","<p>First count the total number of pixels: <b>N = width × height = 10 × 10 = 100</b>. The six frequencies must add up to N: 40 + 30 + 10 + 10 + 6 + 4 = 100.</p><p>Probability of a symbol = frequency ÷ N. For example P(a2) = 40/100 = <b>0.4</b>, which means 40% of the pixels are a2. In the same way a6 = 0.3, a1 = 0.1, a4 = 0.1, a3 = 0.06, a5 = 0.04. They add up to 1. Write them from largest to smallest (sorted).</p>"],
+["Step 2: reduction 1","<p>Take the <b>two smallest</b> probabilities: a3 (0.06) and a5 (0.04). Add them: 0.06 + 0.04 = <b>0.1</b>. This new value stands for \"a3 or a5\". Copy all other values unchanged (0.4, 0.3, 0.1, 0.1). The list now has 5 values, and it is still sorted.</p>"],
+["Step 3: reduction 2","<p>Add the two smallest of column 1: 0.1 (a4) + 0.1 (a3+a5) = <b>0.2</b>. Re-sort: 0.4, 0.3, 0.2, 0.1 (the 0.1 is a1).</p>"],
+["Step 4: reduction 3","<p>0.2 + 0.1 = <b>0.3</b>. Column 3: 0.4, 0.3, 0.3.</p>"],
+["Step 5: reduction 4 (stop)","<p>0.3 + 0.3 = <b>0.6</b>. Column 4: 0.6, 0.4. Only two values are left, so stop.</p>"],
+["Step 6: assign bits, right to left","<p>Column 4: 0.6 → 0, 0.4 → 1, so <b>a2 = 1</b>. Column 3: the 0.6 splits into the two 0.3s, so a6 = 0·0 = <b>00</b> and the other 0.3 = <b>01</b>. Column 2: that 0.3 splits into 0.2 → <b>010</b> and 0.1 (a1) → <b>011</b>. Column 1: the 0.2 splits into a4 → <b>0100</b> and (a3+a5) → <b>0101</b>. Last: a3 → <b>01010</b>, a5 → <b>01011</b>. (Top gets 0, bottom gets 1; the opposite convention gives the same lengths.)</p>"],
+["Step 7: average length and saving","<p>L = 0.4×1 + 0.3×2 + 0.1×3 + 0.1×4 + 0.06×5 + 0.04×5 = <b>2.2 bits/symbol</b>. Total = 100 × 2.2 = <b>220 bits</b> against 100 × 5 = 500 bits for the 5-bit image: ratio 500/220 ≈ <b>2.27</b> (about 56% saved). The entropy is about 2.14 bits, so Huffman is very close to the limit.</p><p><b>Decoding check:</b> the bits 1000110100 read as 1 → a2; 00 → a6; 011 → a1; 0100 → a4. No codeword is the start of another one (a <b>prefix code</b>), so no separators are needed. The decoder must be given the code table.</p>"],
+["Step 8: what if the image size is different?","<p>Huffman coding uses only the <b>probabilities</b>, never the image size. So the question is whether the probabilities change.</p><p><b>Case A: bigger image, same mix.</b> A 20 × 20 image has N = 400 pixels. Frequencies with the same proportions: a2 = 160, a6 = 120, a1 = 40, a4 = 40, a3 = 24, a5 = 16 (total 400). Divide by 400 instead of 100: 0.4, 0.3, 0.1, 0.1, 0.06, 0.04, the <b>same probabilities</b>. So the table, the codes and L = 2.2 are exactly the same. Only the totals change: Huffman 400 × 2.2 = <b>880 bits</b>; 5-bit raw 400 × 5 = <b>2000 bits</b>; ratio 2000/880 ≈ 2.27, unchanged. (Ratio = 5 / L, which does not depend on N.)</p><p><b>Case B: different mix.</b> Take 10 × 10 again but with a2 = 20, a6 = 50, a1 = 10, a4 = 10, a3 = 6, a5 = 4. Now the probabilities are 0.2, 0.5, 0.1, 0.1, 0.06, 0.04. The sorted order changes (a6 = 0.5 goes to the top), so you <b>redo the whole table</b>: 0.06 + 0.04 = 0.1; 0.1 + 0.1 = 0.2; 0.1 + 0.2 = 0.3; 0.2 + 0.3 = 0.5; stop at 0.5 and 0.5. One valid result is a6 = 0, a2 = 10, a1 = 110, a4 = 1110, a3 = 11110, a5 = 11111, with L = 0.5×1 + 0.2×2 + 0.1×3 + 0.1×4 + 0.06×5 + 0.04×5 = <b>2.1 bits</b>. When values tie (several 0.1s) you may merge them in a different order and get different codes, but L is always the same.</p><p><b>Remember:</b> same proportions → same codes, only the total number of bits changes. Different proportions → new probabilities, new table, new codes.</p>"]]},
+{n:"H3 · Huffman (handout A to F example)",g:"Probabilities: A 0.40, B 0.30, C 0.10, D 0.10, E 0.06, F 0.04. A fixed code needs 3 bits.",
+h:["Symbol","p","Code","Length","p × length"],
+r:[["A","0.40","0@3","1@3","0.40@4"],["B","0.30","10@3","2@3","0.60@4"],["C","0.10","1110@3","4@3","0.40@4"],["D","0.10","1111@3","4@3","0.40@4"],["E","0.06","1101@3","4@3","0.24@4"],["F","0.04","1100@3","4@3","0.16@4"],["Average","","","","L = 2.20@4"]],
+s:[["The blank worksheet","<p>Huffman coding gives short codewords to common symbols and long ones to rare symbols. No codeword is the start of another (a <b>prefix code</b>).</p>"],
+["Step 1: merge the two smallest","<p>F 0.04 + E 0.06 = 0.10. Then C 0.10 + D 0.10 = 0.20.</p>"],
+["Step 2: keep merging","<p>(EF) 0.10 + (CD) 0.20 = 0.30. B 0.30 + (CDEF) 0.30 = 0.60. A 0.40 + (BCDEF) 0.60 = 1.00, the root.</p>"],
+["Step 3: label branches 0 and 1","<p>Read each code from the root down: A = 0, B = 10, C = 1110, D = 1111, E = 1101, F = 1100. Lengths 1, 2, 4, 4, 4, 4.</p>"],
+["Step 4: average length","<p>L = 0.40 + 0.60 + 0.40 + 0.40 + 0.24 + 0.16 = <b>2.20 bits</b>. Entropy H = 2.14, so efficiency = 2.14/2.20 = 97%. Versus 3 bits fixed: 27% saved.</p>"],
+["Decoding example","<p>Decode 1001111: read 10 → B; read 0 → A; read 1111 → D. Message: <b>BAD</b>. No separators needed.</p>"]]},
+
+{n:"H3 · Huffman length vs entropy",g:"Probabilities A 0.40, B 0.30, C 0.10, D 0.10, E 0.06, F 0.04. They are not powers of ½, so the ideal lengths are not whole numbers.",
+h:["Symbol","p","Ideal bits −log₂p","p × ideal","Huffman code","Length","p × length"],
+r:[["A","0.40","1.32@1","0.529@2","0@3","1@3","0.40@4"],["B","0.30","1.74@1","0.521@2","10@3","2@3","0.60@4"],["C","0.10","3.32@1","0.332@2","1110@3","4@3","0.40@4"],["D","0.10","3.32@1","0.332@2","1111@3","4@3","0.40@4"],["E","0.06","4.06@1","0.244@2","1101@3","4@3","0.24@4"],["F","0.04","4.64@1","0.186@2","1100@3","4@3","0.16@4"],["Total","1.00","","H = 2.14@2","","","L = 2.20@4"]],
+s:[["The blank worksheet","<p>When probabilities are not powers of ½, the ideal length −log₂ p is not a whole number. Can Huffman coding still reach the entropy? Fill in the table to see.</p>"],
+["Step 1: ideal bits","<p>−log₂ p for each symbol: A 1.32, B 1.74, C and D 3.32, E 4.06, F 4.64.</p>"],
+["Step 2: entropy","<p>p × ideal for each symbol, then add: 0.529 + 0.521 + 0.332 + 0.332 + 0.244 + 0.186 = <b>H ≈ 2.14 bits/symbol</b>. This is the limit.</p>"],
+["Step 3: what Huffman can do","<p>A codeword needs a whole number of bits, so a symbol that ideally needs 1.32 bits gets 1 or 2. Huffman picks the best whole-number lengths: 1, 2, 4, 4, 4, 4. A and E get slightly less than ideal; B, C, D and F get more.</p>"],
+["Step 4: average length and comparison","<p>L = 0.40 + 0.60 + 0.40 + 0.40 + 0.24 + 0.16 = <b>2.20 bits</b>. Gap = 2.20 − 2.14 = 0.06 bits. Efficiency = 2.14/2.20 ≈ <b>97%</b>. A fixed 3-bit code uses 3.00.</p><p>For 100 symbols: Huffman 220 bits, entropy limit about 214 bits, fixed code 300 bits. Huffman coding is optimal among codes with whole bits per symbol but cannot reach 214 exactly. The general rule is <b>H ≤ L &lt; H + 1</b>; L = H only when every p is a power of ½.</p>"]]},
+{n:"H3 · Huffman limit: binary image",g:"A scanned page is 90% white and 10% black (two symbols).",
+h:["Symbol","p","Ideal bits −log₂p","p × ideal","Huffman length"],
+r:[["White","0.9","0.152@1","0.137@2","1@3"],["Black","0.1","3.322@1","0.332@2","1@3"],["Total","1.0","","H = 0.47@2","L = 1@3"]],
+s:[["The blank worksheet","<p>This is the extreme case where Huffman coding is far from the entropy.</p>"],
+["Step 1: ideal bits","<p>White is very likely, so it deserves only <b>0.152</b> bits. Black is rare, so it deserves <b>3.322</b> bits.</p>"],
+["Step 2: entropy","<p>H = 0.9 × 0.152 + 0.1 × 3.322 = 0.137 + 0.332 ≈ <b>0.47 bits/pixel</b>.</p>"],
+["Step 3: Huffman gives 1 bit each","<p>Every codeword has at least one whole bit, so the two codes are 0 and 1 and <b>L = 1 bit/pixel</b>, more than twice the entropy. The lab shows the same: entropy 0.453 bpp, Huffman 1.000 bpp.</p>"],
+["Step 4: what to use instead","<p>Code whole runs instead of single pixels (run-length encoding, then Huffman on the run lengths), or use arithmetic coding, which can spend a fraction of a bit per symbol.</p>"]]},
+{n:"H3 · Run-length encoding",g:"One binary row (255 = white, 0 = black): 255 255 255 255 0 0 0 255 255 255 255 255 255 0 0 255 (16 values).",
+h:["Run","Value","Length","Binary RLE (lengths only)"],
+r:[["1","255@1","4@1","4@2"],["2","0@1","3@1","3@2"],["3","255@1","6@1","6@2"],["4","0@1","2@1","2@2"],["5","255@1","1@1","1@2"],["Bytes","10 (value + length)@3","","5@3"]],
+s:[["The blank worksheet","<p>A <b>run</b> is a group of identical neighbouring values. RLE stores each run as (value, length).</p>"],
+["Step 1: find the runs","<p>Scan left to right and note where the value changes: (255, 4), (0, 3), (255, 6), (0, 2), (255, 1). Five pairs instead of 16 values.</p>"],
+["Step 2: binary RLE","<p>In a black-and-white image the colours alternate, so only the lengths are stored, by agreement starting with white: <b>4, 3, 6, 2, 1</b>.</p>"],
+["Step 3: count the bytes","<p>Raw: 16 bytes. Pairs (1 byte value + 1 byte length): <b>10</b> bytes. Lengths only: <b>5</b> bytes.</p>"],
+["When RLE fails","<p>A photo row such as 52 55 61 66 70 61 64 73 has no equal neighbours, so every run has length 1: 8 pairs = twice the original size. On the coffee photo the mean run is 1.2 px (ratio 0.40:1). On its binary version the mean run is 14.1 px (4.69:1). Scanned text pages, mostly white, gain the most (fax).</p>"]]},
+
+{n:"H3 · JPEG",g:"<p>JPEG codes a photo one 8 × 8 block at a time. Here we follow a single block, taken from the white side of the cup in the handout’s coffee photo. It is smooth: bright at the top (251), darker at the bottom (149). Quality 50 means the standard quantisation table.</p><pre>251 251 251 251 250 251 251 251\n251 251 251 251 251 251 250 250\n246 245 245 244 245 244 242 241\n234 234 233 233 233 232 231 230\n228 228 227 226 227 226 226 226\n220 220 220 218 218 218 217 217\n204 204 203 201 200 197 195 193\n168 168 167 164 161 157 152 149</pre>",
+h:["Stage","What happens","Result for this block"],
+r:[["1. Level shift","Subtract 128 from every pixel@1","Values now −128 to 127; block average ≈ 95@1"],["2. DCT","64 pixels → 64 coefficients@2","DC ≈ 760 (8 × 95); first column 207, −69, 52, −42@2"],["3. Quantise","Divide each by its Q step, round (lossy)@3","760/16 → 47; 207/12 → 17; −69/14 → −5; −10/49 → 0@3"],["4. Zig-zag + EOB","Read low to high frequency@4","47, 1, 17, −5, −1, 0, 0, 0, 1, 4, −2, 0 … 0, 1, EOB@4"],["5. Decode","× Q, inverse DCT, + 128@5","Largest pixel error 5.7 grey levels@5"]],
+s:[["The blank worksheet","<p>JPEG splits the image into 8 × 8 blocks and codes each on its own. Follow one block through the pipeline.</p>"],
+["Step 1: level shift","<p>Subtract 128 so values are centred on 0. The block average is about 95.</p>"],
+["Step 2: DCT","<p>The block becomes 64 weights of cosine patterns. The DC coefficient is 8 × average ≈ 760. Because the block changes top to bottom, the first column is large; nearly everything else is between −3 and 3 (energy compaction).</p>"],
+["Step 3: quantise (the lossy step)","<p><span class='m'>q = round(F / Q)</span>. Big steps for high frequencies turn most of them into 0. This rounding cannot be undone.</p>"],
+["Step 4: zig-zag and EOB","<p>Reading in zig-zag order collects the zeros at the end. The last run of zeros costs a single EOB code. The DC value is coded as a difference from the previous block, and the rest is Huffman-coded.</p>"],
+["Step 5: decode","<p>Multiply by Q, inverse DCT, add 128. The block comes back almost unchanged (max error 5.7).</p>"],
+["Quality trade-off","<p>q = 90: 3.6:1, 39.0 dB. q = 50: 10:1, 32.2 dB. q = 10: 29.7:1, 27.5 dB, with visible 8 × 8 blocking. Quality scales Q: lower quality means bigger steps, more zeros, smaller file.</p>"]]},
+
+{n:"H3 · Fractal compression",g:"Decoder rule for one pixel: x → 0.5x + 60 (contrast s = 0.5, brightness o = 60). Start from two different values.",
+h:["Round n","Start x = 0","Start x = 255"],
+r:[["0","0","255"],["1","60@1","187.5@1"],["2","90@1","153.75@1"],["3","105@2","136.9@2"],["4","112.5@2","128.4@2"],["Limit","120@3","120@3"]],
+s:[["The blank worksheet","<p>Fractal coding stores copy rules, not pixels: <i>this small range block looks like that bigger domain block, shrunk, turned, made darker</i>. The decoder applies the rules again and again from any starting picture.</p>"],
+["Step 1: apply the rule","<p>From 0: 0.5 × 0 + 60 = 60, then 0.5 × 60 + 60 = 90. From 255: 187.5, then 153.75.</p>"],
+["Step 2: repeat","<p>From 0: 105, 112.5. From 255: 136.9, 128.4. The two columns are closing in on each other.</p>"],
+["Step 3: the fixed point","<p>Both reach <b>o / (1 − s) = 60 / 0.5 = 120</b>. Because |s| &lt; 1 each round halves the distance, so the start does not matter. This is why |s| must stay below 1 (a contractive map).</p>"],
+["Cost of one block","<p>Domain position 10 bits + isometry 3 + s 5 + o 7 = <b>25 bits</b> for a 4 × 4 range (raw 128 bits): 5.1:1, 1.56 bpp. 8 × 8 ranges give 22.3:1. The test image settles at 31.8 dB after about 6 rounds, even from noise. Encoding is slow (every range is compared with every domain); decoding is fast.</p>"]]},
+
+/* ---------- Handout 4 ---------- */
+{n:"H4 · Binary images and connectivity",g:"A 3 × 3 patch:<br><pre>1 0 0\n0 1 0\n0 0 1</pre>",
+h:["Rule","Neighbours counted","Objects in the patch"],
+r:[["4-connectivity","Up, down, left, right@1","3 separate objects@2"],["8-connectivity","The 4 above plus the 4 diagonals@1","1 diagonal line@2"]],
+s:[["The blank worksheet","<p>A binary image has object pixels (1, white = 255) and background (0). Grey to binary: <span class='m'>g = 255 if f &gt; T else 0</span>. <b>Otsu</b> chooses T automatically.</p>"],
+["Step 1: define neighbours","<p>4-neighbours are the straight ones. 8-neighbours add the diagonals. Two white pixels are connected if a path of white neighbours joins them.</p>"],
+["Step 2: count objects","<p>The three pixels touch only at corners. Under 4-connectivity: <b>3 objects</b>. Under 8-connectivity: <b>1 object</b>.</p>"],
+["On a real image","<p>Coins, Otsu T = 107: <b>148</b> components (4-conn) or <b>94</b> (8-conn), but only 24 have area ≥ 50 px; the rest are specks. Under uneven light one global T fails, so use an adaptive threshold (a different T per neighbourhood). Set operations check out: |A ∪ B| = 11 289 + 9 191 − 4 273 = 16 207.</p>"]]},
+
+{n:"H4 · Structuring elements",g:"An SE is a small probe with an origin (usually the centre). Use odd sizes such as 3, 5, 7.",
+h:["Structuring element","5 × 5 pattern","Best used for"],
+r:[["Rectangle (MORPH_RECT)","All 1s@1","Fast; gives square corners@2"],["Ellipse (MORPH_ELLIPSE)","Rough disc, rounded corners@1","Keeping round objects round@2"],["Cross (MORPH_CROSS)","Middle row and column only@1","Spreading in 4 directions@2"],["Line","One row or column of 1s@1","Finding horizontal or vertical lines@2"]],
+s:[["The blank worksheet","<p>The operator slides the SE over the image and asks, at each position, whether the SE <b>fits</b> inside the object (every 1 on an object pixel) or <b>hits</b> it (at least one 1 on an object pixel).</p>"],
+["Step 1: the patterns","<p>The three built-in shapes are 5 × 5 grids of 0s and 1s; a line SE is made by hand with NumPy.</p>"],
+["Step 2: choose by purpose","<p>The shape decides which parts survive. Eroding the horse with a horizontal line removes the thin vertical legs, because a horizontal line cannot fit inside them.</p>"],
+["Step 3: choose the size","<p>Make the SE just bigger than what you want to remove (about 5 × 5 for specks up to 3 px). Too big also destroys real parts such as legs and tails. Dilating the horse (43 412 white px) with 15 × 15 SEs gives rect 59 699 &gt; ellipse 57 387 &gt; cross 56 089.</p>"]]},
+
+{n:"H4 · Dilation and erosion",g:"Image A (7 × 7), 3 × 3 square SE, pixels outside count as 0:<br>"+AG,
+h:["Operation","Pixel (row, col)","Window under the SE","Output"],
+r:[["Dilation","(0, 0)","Contains (1,1) = 1, so the SE hits@1","1@2"],["Dilation","(0, 5)","Rows 0–1, cols 4–6 all 0, no hit@1","0@2"],["Erosion","(2, 2)","Rows 1–3, cols 1–3 all 1, the SE fits@1","1@2"],["Erosion","(3, 4)","Contains (2,4) = 0, no fit@1","0@2"]],
+s:[["The blank worksheet","<p><b>Dilation</b>: output is 1 if the SE hits the object. <b>Erosion</b>: output is 1 only if the SE fits completely inside it.</p>"],
+["Step 1: look at each window","<p>Place the 3 × 3 window on each pixel and check the nine pixels under it (rows and columns numbered from 0).</p>"],
+["Step 2: decide the output","<p>Any 1 in the window gives a dilation output of 1. Erosion needs all nine to be 1. Only (2, 2) passes the erosion test in the whole image.</p>"],
+["Whole-image result","<p>Dilation grows the object by one pixel on every side and fills small gaps. Erosion leaves just the single pixel (2, 2); the speck at (6, 5) and thin parts vanish. Paint and sandpaper: dilation paints a border, erosion sands the object down. They are not inverses of each other.</p>"]]},
+
+{n:"H4 · Opening and closing",g:"Same image A and 3 × 3 square SE:<br>"+AG,
+h:["Operator","First operation","Second operation","Net effect"],
+r:[["Opening A ∘ B (erode, then dilate)","Erode: only (2,2) survives@1","Dilate: (2,2) grows back into the 3 × 3 block, rows 1–3, cols 1–3@1","Lower-right part and the speck at (6,5) are gone@2"],["Closing A • B (dilate, then erode)","Dilate: everything grows@3","Erode: shrinks back to about the old size@3","Only change: pixel (5,5) added, closing a 1-pixel gap@4"]],
+s:[["The blank worksheet","<p>Opening and closing combine the two basic operators so the object keeps about its size.</p>"],
+["Step 1: opening, the two operations","<p>Erosion removes everything the SE cannot fit in; dilation then regrows the survivors.</p>"],
+["Step 2: opening, the effect","<p>Opening removes small white specks and thin bridges (a sieve for white things).</p>"],
+["Step 3: closing, the two operations","<p>Dilation fills small holes and gaps; erosion then shrinks the object back.</p>"],
+["Step 4: closing, the effect","<p>Closing fills small black holes and narrow cracks.</p>"],
+["Properties and filtering","<p>Both are <b>idempotent</b> (doing them twice = once). Opening never adds pixels; closing never removes pixels. On the damaged horse (1 676 wrong pixels), opening then closing gives 679 and closing then opening gives 524. Order matters.</p>"]]},
+
+{n:"H4 · Boundary extraction",g:"Image A (7 × 7), 3 × 3 square SE:<br>"+AG,
+h:["Quantity","Pixels on the example"],
+r:[["|A| (white pixels)","15@1"],["|A ⊖ B| (erosion)","1@2"],["β(A) = A − (A ⊖ B)","14@3"]],
+s:[["The blank worksheet","<p>Erosion removes one outer layer from the object. Subtracting it from the original leaves only that layer: the boundary.</p>"],
+["Step 1: count A","<p>Row 1: 3, row 2: 3, row 3: 5, row 4: 3, row 6: 1. Total <b>15</b>.</p>"],
+["Step 2: erode","<p>Only the centre of the 3 × 3 block, (2, 2), survives: <b>1 pixel</b>.</p>"],
+["Step 3: subtract","<p>A minus that pixel = <b>14 pixels</b>: all of A except (2, 2), a ring with a hole in the 3 × 3 block.</p>"],
+["Other versions","<p>A 3 × 3 SE gives a boundary about 1 pixel thick; 5 × 5 gives about 2. <b>Outer boundary</b> = (A ⊕ B) − A. <b>Gradient</b> = (A ⊕ B) − (A ⊖ B), both together. Horse: inner 2 068, outer 2 054, gradient 4 122. Coins: 3 031 boundary pixels for 38 497 object pixels.</p>"]]},
+
+{n:"H4 · Hole filling and the coin pipeline",g:"Goal: count 24 coins in a photo with glare, broken coins and dark centres.",
+h:["Pipeline step","Objects counted","Why it changes"],
+r:[["Plain Otsu","94@1","Glare, specks and black holes"],["Top-hat (61 × 61 disc) + Otsu","52@2","Glare removed; coins still broken@2"],["+ Closing (7 × 7 disc)","27@3","Broken pieces of each coin joined@3"],["+ Hole filling","27@4","Count unchanged; coins are now solid@4"],["+ Opening (9 × 9 disc)","24@5","Last specks removed: one object per coin@5"]],
+s:[["The blank worksheet","<p>Raw thresholding is never enough. Each morphological step fixes one defect. A <b>hole</b> is a black region the background cannot reach.</p>"],
+["Step 1: plain Otsu","<p>94 components for 24 coins (8-connectivity).</p>"],
+["Step 2: top-hat","<p>Image minus its opening removes the bright glare, leaving 52 pieces.</p>"],
+["Step 3: closing","<p>Dilate then erode joins the broken pieces: 27 objects.</p>"],
+["Step 4: hole filling","<p>Flood-fill the background from corner (0, 0). Any black pixel the flood does not reach must be a hole; OR those pixels into the object. This needs the corner to be background. The count stays 27, but every coin is solid, so area measurements are correct.</p>"],
+["Step 5: opening","<p>Removes the last 3 specks: exactly <b>24 objects</b>.</p>"]]},
+
+{n:"H4 · Top-hat and black-hat",g:"One row of grey values with a bright spike at x = 3. SE: width 3, edge pixels repeated at the border.",
+h:["x","0","1","2","3","4","5","6"],
+r:[["Image f","50","52","54","90","58","60","60"],["Erosion (min of 3)","50@1","50@1","52@1","54@1","58@1","58@1","60@1"],["Opening (max of 3 of the erosion)","50@2","52@2","54@2","58@2","58@2","60@2","60@2"],["Top-hat = f − opening","0@3","0@3","0@3","32@3","0@3","0@3","0@3"]],
+s:[["The blank worksheet","<p>The background light rises slowly from 50 to 60. The spike (90) is a small bright object. Opening with an SE bigger than the object removes it and keeps the background.</p>"],
+["Step 1: erosion","<p>Each value becomes the minimum of itself and its two neighbours. At x = 3: min(54, 90, 58) = <b>54</b>, so the spike is gone.</p>"],
+["Step 2: dilation of the erosion = opening","<p>Each value becomes the maximum of three neighbours. Result: 50, 52, 54, 58, 58, 60, 60, an estimate of the background light.</p>"],
+["Step 3: top-hat","<p>f − opening = 0, 0, 0, <b>32</b>, 0, 0, 0. Only the small bright object remains.</p>"],
+["Black-hat for dark objects","<p>Black-hat = closing − image. For g = 52, 52, 54, <b>20</b>, 58, 60, 60 the closing is 52, 52, 54, 54, 58, 60, 60, so black-hat = 0, 0, 0, <b>34</b>, 0, 0, 0. Use it for dark text on uneven paper: the text pixels drop from 47 478 (plain Otsu) to 12 606. The SE must be wider than the strokes (5 × 5 leaves letters hollow) and smaller than the changes in light.</p>"]]},
+
+{n:"H4 · Skeleton",g:"Goal: a 1-pixel-wide centre line that keeps the shape structure. SE: 3 × 3 cross.",
+h:["Step in each round","Operation","Purpose"],
+r:[["1","Open the current image@1","Opening deletes thin parts the SE cannot fit in@1"],["2","Piece = current − opening@2","Those deleted pixels are this round’s skeleton piece@2"],["3","Skeleton = skeleton ∪ piece@3","Collect the pieces from every round@3"],["4","Erode the current image@4","Shrink one layer; repeat until nothing is left@4"]],
+s:[["The blank worksheet","<p>The skeleton S(A) = ∪ₖ [(A ⊖ kB) − (A ⊖ kB) ∘ B]. In code, repeat the four steps in each round.</p>"],
+["Step 1: opening","<p>Opening removes details smaller than the SE: the thin tips of the current shape.</p>"],
+["Step 2: subtract","<p>Image minus its opening keeps exactly the pixels the opening removed.</p>"],
+["Step 3: union","<p>OR the piece into the skeleton.</p>"],
+["Step 4: erode and repeat","<p>Erode by one layer and go round again, until the image is empty.</p>"],
+["Result","<p>The horse takes <b>57 erosions</b> and gives <b>1 365 skeleton pixels</b>: body, four legs, neck and tail each a single line. Used in character and fingerprint recognition and for blood vessels, where the line structure matters more than the thickness.</p>"]]}
+];
+var GL={
+"H3 · The three redundancies":"<p><b>What it is:</b> redundancy is extra data that carries no extra information. There are three kinds: coding (uneven symbol frequencies), spatial (similar neighbours) and psychovisual (detail the eye ignores).</p><p><b>Why it is used:</b> compression works by finding and removing redundancy, so you must know which kind your image has before choosing a method.</p>",
+"H3 · Entropy":"<p><b>What it is:</b> the average number of bits per symbol that the data really needs, <span class='m'>H = −Σ p log₂ p</span>. Rare values carry more information (more bits) than common ones.</p><p><b>Why it is used:</b> it is the lower limit for any code that codes each pixel on its own. Comparing a coder’s average length with H tells you how good the coder is and whether it is worth trying (if H is near 8 bits, Huffman saves almost nothing).</p>",
+"H3 · Compression ratio, MSE and PSNR":"<p><b>What they are:</b> compression ratio C = original size ÷ compressed size. MSE = average of (original − decoded)². PSNR = 10 log₁₀(255²/MSE) in dB.</p><p><b>Why they are used:</b> a lossy method changes pixels, so size alone is meaningless. MSE and PSNR give one number for the quality, and you always report it together with the size. Higher PSNR means a better image.</p>",
+"H3 · Huffman coding":"<p><b>What it is:</b> a lossless code that gives short codewords to common symbols and long ones to rare symbols. <b>Source reduction</b> means repeatedly adding the two smallest probabilities until two values are left. Then bits are assigned going backwards.</p><p><b>Why it is used:</b> it is the best code that uses a whole number of bits per symbol, and it removes coding redundancy. It is inside JPEG, PNG (DEFLATE) and ZIP.</p>",
+"H3 · Huffman (handout A to F example)":"<p><b>What it is:</b> the same Huffman method on the handout’s six symbols A to F, with a tree-style merge list.</p><p><b>Why it is used:</b> to see that the merge order may differ (ties can go either way), but the average length is always the same.</p>",
+"H3 · Huffman length vs entropy":"<p><b>What it is:</b> a comparison of Huffman’s average length L with the entropy H.</p><p><b>Why it is used:</b> it shows the rule H ≤ L &lt; H + 1: Huffman is never below the entropy and, when probabilities are not powers of ½, slightly above it.</p>",
+"H3 · Huffman limit: binary image":"<p><b>What it is:</b> the worst case for Huffman: only two symbols, one very likely.</p><p><b>Why it is used:</b> it explains why fax and scanned pages use run-length or arithmetic coding instead of Huffman on single pixels.</p>",
+"H3 · Run-length encoding":"<p><b>What it is:</b> a lossless method that stores each run of identical values as (value, length).</p><p><b>Why it is used:</b> it removes spatial redundancy in images with long runs: scanned text, fax, icons and the top bit planes. It fails on photos where neighbours differ.</p>",
+"H3 · JPEG":"<p><b>What it is:</b> the standard lossy photo format. <b>DCT</b> turns an 8 × 8 block into frequency weights; <b>quantisation</b> rounds them using a table Q; <b>zig-zag</b> orders them; <b>EOB</b> marks that the rest are zeros.</p><p><b>Why it is used:</b> most of a block’s information sits in a few low frequencies, and the eye hardly notices the high ones. Dropping them gives 10:1 with little visible loss.</p>",
+"H3 · Fractal compression":"<p><b>What it is:</b> storing copy rules (range block ≈ s × shrunk domain block + o) instead of pixels. The decoder repeats the rules until the image settles (the fixed point).</p><p><b>Why it is used:</b> natural images are self-similar, so it works well at high compression and can be decoded at any size. Encoding is slow.</p>",
+"H4 · Binary images and connectivity":"<p><b>What it is:</b> a binary image has only object (white) and background (black). Connectivity (4 or 8 neighbours) decides which white pixels belong to the same object.</p><p><b>Why it is used:</b> binary images are simple and fast, and they are the starting point for counting and measuring objects.</p>",
+"H4 · Structuring elements":"<p><b>What it is:</b> a small pattern of 0s and 1s (the probe) that slides over the image.</p><p><b>Why it is used:</b> its shape and size decide what survives: size sets how big a defect must be to be removed, shape sets the direction and corner style.</p>",
+"H4 · Dilation and erosion":"<p><b>What they are:</b> dilation grows objects (SE hits the object); erosion shrinks them (SE fits inside).</p><p><b>Why they are used:</b> they are the two building blocks. Dilation fills gaps, erosion removes specks and thin parts. All other operators are made from them.</p>",
+"H4 · Opening and closing":"<p><b>What they are:</b> opening = erosion then dilation; closing = dilation then erosion.</p><p><b>Why they are used:</b> they clean an image without changing the size of the big objects: opening removes white specks, closing fills black holes and cracks.</p>",
+"H4 · Boundary extraction":"<p><b>What it is:</b> the outline of an object, β(A) = A − (A ⊖ B).</p><p><b>Why it is used:</b> to measure perimeters and draw outlines. The gradient (dilation − erosion) does the same on grey images and acts as an edge detector.</p>",
+"H4 · Hole filling and the coin pipeline":"<p><b>What it is:</b> hole filling turns the black regions enclosed by an object solid. The pipeline chains top-hat, Otsu, closing, filling and opening.</p><p><b>Why it is used:</b> area measurement and counting need solid, separate objects, and raw thresholding gives glare, specks and holes.</p>",
+"H4 · Top-hat and black-hat":"<p><b>What they are:</b> top-hat = image − opening (small bright details). Black-hat = closing − image (small dark details).</p><p><b>Why they are used:</b> they remove uneven background light before thresholding, for example dark text on a shadowed page.</p>",
+"H4 · Skeleton":"<p><b>What it is:</b> a 1-pixel-wide centre line that keeps the shape’s structure.</p><p><b>Why it is used:</b> character and fingerprint recognition and vessel analysis care about the line structure, not the thickness.</p>"
+};
+var $id=function(x){return document.getElementById(x)};
+var IC={
+ l:'<path d="M15 18l-6-6 6-6"/>',
+ r:'<path d="M9 6l6 6-6 6"/>',
+ restart:'<path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M4.5 4.5v4h4"/>',
+ play:'<path d="M8 5.5v13l10.5-6.5z" fill="currentColor" stroke="none"/>',
+ pause:'<path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z" fill="currentColor" stroke="none"/>',
+ back:'<path d="M6 5v14"/><path d="M18 6.5l-8 5.5 8 5.5z" fill="currentColor"/>',
+ fwd:'<path d="M18 5v14"/><path d="M6 6.5l8 5.5-8 5.5z" fill="currentColor"/>',
+ book:'<path d="M12 6.5C10.4 5.3 8.2 4.5 5 4.5H3v14h2c3.2 0 5.4.8 7 2 1.6-1.2 3.8-2 7-2h2v-14h-2c-3.2 0-5.4.8-7 2z"/><path d="M12 6.5v14"/>',
+ list:'<path d="M9 6h11M9 12h11M9 18h11"/><path d="M4.5 6h.01M4.5 12h.01M4.5 18h.01" stroke-width="3"/>',
+ sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6l1.4 1.4M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4L6 18M18 6l1.4-1.4"/>',
+ moon:'<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>',
+ auto:'<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/>',
+ x:'<path d="M6 6l12 12M18 6L6 18"/>',
+ check:'<path d="M5 12.5l4.5 4.5L19 7.5"/>'
+};
+function ic(n,s){s=s||18;return'<svg viewBox="0 0 24 24" width="'+s+'" height="'+s+'" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">'+IC[n]+"</svg>"}
+function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
+document.querySelectorAll("[data-ic]").forEach(function(e){e.insertAdjacentHTML("afterbegin",ic(e.getAttribute("data-ic")))});
+var store={get:function(k,d){try{var v=localStorage.getItem("cm:"+k);return v==null?d:JSON.parse(v)}catch(e){return d}},set:function(k,v){try{localStorage.setItem("cm:"+k,JSON.stringify(v))}catch(e){}}};
+var reduced=!!(window.matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches);
+
+/* Theme: Match my system / Light / Dark, remembered in this browser */
+(function(){var t=store.get("theme","auto");if(t!=="light"&&t!=="dark")t="auto";
+ document.querySelectorAll('input[name="theme"]').forEach(function(r){r.checked=r.value===t;
+  r.addEventListener("change",function(){if(r.value==="auto")document.documentElement.removeAttribute("data-theme");else document.documentElement.setAttribute("data-theme",r.value);store.set("theme",r.value)})})})();
+
+/* Topics */
+var H3N=T.filter(function(t){return/^H3/.test(t.n)}).length;
+function tname(t){return t.n.replace(/^H\d · /,"")}
+var prog=store.get("prog",{}),pos=store.get("pos",{}),cur=+store.get("cur",0)||0;
+if(typeof prog!=="object"||!prog)prog={};if(typeof pos!=="object"||!pos)pos={};
+if(!(cur>=0&&cur<T.length))cur=0;
+var i=Math.max(0,Math.min(+pos[cur]||0,T[cur].s.length-1));
+function ring(k){var n=T[k].s.length-1,p=Math.min(1,(+prog[k]||0)/n);
+ return p>=1?'<span class="ring done">'+ic("check",12)+'</span><span class="sr"> (finished)</span>':'<span class="ring" style="--p:'+p.toFixed(3)+'"></span>'}
+function listHTML(){var h="";
+ [["Handout 3: Image compression",0,H3N],["Handout 4: Morphology",H3N,T.length]].forEach(function(g){
+  h+='<p class="tl-h">'+g[0]+'</p><ol class="tl">';
+  for(var k=g[1];k<g[2];k++)h+='<li><button type="button" class="tp" data-k="'+k+'"><span class="rw">'+ring(k)+"</span><span>"+tname(T[k])+"</span></button></li>";
+  h+="</ol>"});
+ return h+'<button type="button" class="link clr">Clear my progress</button>'}
+function paintList(){var h=listHTML();$id("sideList").innerHTML=h;$id("dlgList").innerHTML=h;markList()}
+function markList(){document.querySelectorAll(".tp").forEach(function(b){b.setAttribute("aria-current",+b.getAttribute("data-k")===cur?"true":"false")})}
+function refreshRing(k){document.querySelectorAll('.tp[data-k="'+k+'"] .rw').forEach(function(e){e.innerHTML=ring(k)})}
+function go(k){if(k===cur)return;cur=k;i=Math.max(0,Math.min(+pos[k]||0,T[k].s.length-1));render();markList();
+ if(window.syncDemo)window.syncDemo(T[cur].n);
+ var L=$id("lesson");if(L.getBoundingClientRect().top<0)L.scrollIntoView({behavior:reduced?"auto":"smooth",block:"start"})}
+document.addEventListener("click",function(e){var t=e.target;if(!t.closest)return;
+ var b=t.closest(".tp");if(b){go(+b.getAttribute("data-k"));var d=$id("topics");if(d.open)d.close();return}
+ if(t.closest(".clr")){prog={};pos={};i=0;store.set("prog",prog);store.set("pos",pos);paintList();render()}});
+
+/* Steps */
+var SUM=/^(Total|Sum|Average|Average length|Bytes|Limit)$/,dotsFor=-1;
+function stitle(s){var x=s[0].replace(/^(Step \d+: |\d+\. )/,"");return x.charAt(0).toUpperCase()+x.slice(1)}
+function slabel(t,k){return(k===0?"Start: ":"Step "+k+": ")+stitle(t.s[k])}
+function render(){
+ var t=T[cur],s=t.s[i],last=t.s.length-1,h4=cur>=H3N;
+ if(i>(+prog[cur]||0)){prog[cur]=i;store.set("prog",prog);refreshRing(cur)}
+ pos[cur]=i;store.set("pos",pos);store.set("cur",cur);
+ $id("crumb").textContent=h4?"Handout 4 · topic "+(cur-H3N+1)+" of "+(T.length-H3N):"Handout 3 · topic "+(cur+1)+" of "+H3N;
+ $id("ttl").textContent=tname(t);
+ $id("w").innerHTML=(GL[t.n]||"").replace(/<b>([^<]+?):<\/b>/g,"<b>$1</b>");
+ $id("g").innerHTML='<p class="lbl-k">Given</p><div class="gt">'+t.g+"</div>";
+ var h="<thead><tr>"+t.h.map(function(x){return'<th scope="col">'+x+"</th>"}).join("")+"</tr></thead><tbody>";
+ t.r.forEach(function(row){var f=row[0].replace(/@\d+$/,"");
+  h+="<tr"+(SUM.test(f)?' class="sum"':"")+">"+row.map(function(c,ci){var m=c.match(/^(.*)@(\d+)$/),k=m?+m[2]:0,x=m?m[1]:c;
+   if(ci===0)return'<th scope="row"><span>'+x+"</span></th>";
+   if(k>i)return'<td class="todo"><span aria-hidden="true"></span></td>';
+   return"<td"+(k===i&&k>0?' class="new"':"")+"><span>"+x+"</span></td>"}).join("")+"</tr>"});
+ $id("t").innerHTML=h+"</tbody>";
+ $id("sk").textContent=i===0?"Before you start":"Step "+i+" of "+last;
+ $id("sh").textContent=stitle(s);
+ $id("sx").innerHTML=s[1];
+ var D=$id("dots");
+ if(dotsFor!==cur){var d="";for(var k=0;k<=last;k++){var L=esc(slabel(t,k));d+='<button type="button" class="dot" data-s="'+k+'" aria-label="'+L+'" data-tip="'+L+'"></button>'}D.innerHTML=d;dotsFor=cur}
+ D.querySelectorAll(".dot").forEach(function(b,k){b.classList.toggle("past",k<i);if(k===i)b.setAttribute("aria-current","step");else b.removeAttribute("aria-current")});
+ $id("cnt").innerHTML=(i===0?"Start":"Step "+i+" of "+last)+'<span class="keys"> · <kbd>←</kbd> <kbd>→</kbd> keys</span>';
+ $id("prev").disabled=i===0;$id("reset").disabled=i===0;
+ var nb=$id("next");
+ if(i<last){nb.setAttribute("data-mode","step");nb.innerHTML='<span class="lbl">Next step</span>'+ic("r");nb.removeAttribute("data-tip");nb.removeAttribute("aria-label");nb.disabled=false}
+ else if(cur<T.length-1){var nx=tname(T[cur+1]);nb.setAttribute("data-mode","topic");nb.innerHTML='<span class="lbl">Next topic</span>'+ic("r");nb.setAttribute("data-tip",nx);nb.setAttribute("aria-label","Next topic: "+nx);nb.disabled=false}
+ else{nb.setAttribute("data-mode","");nb.innerHTML='<span class="lbl">All topics done</span>'+ic("check");nb.removeAttribute("data-tip");nb.removeAttribute("aria-label");nb.disabled=true}
+}
+$id("next").onclick=function(){var m=this.getAttribute("data-mode");if(m==="step"){i++;render()}else if(m==="topic")go(cur+1)};
+$id("prev").onclick=function(){if(i>0){i--;render()}};
+$id("reset").onclick=function(){i=0;render()};
+$id("dots").onclick=function(e){var b=e.target.closest(".dot");if(b){i=+b.getAttribute("data-s");render()}};
+document.addEventListener("keydown",function(e){
+ if(e.defaultPrevented||e.altKey||e.ctrlKey||e.metaKey||e.shiftKey)return;
+ var el=e.target,tg=el.tagName;
+ if(tg==="INPUT"||tg==="SELECT"||tg==="TEXTAREA"||el.isContentEditable)return;
+ if(document.querySelector("dialog[open]"))return;
+ if(el.closest&&(el.closest("#demo")||el.closest(".sheet")))return;
+ if(e.key==="ArrowRight"&&i<T[cur].s.length-1){e.preventDefault();i++;render()}
+ else if(e.key==="ArrowLeft"&&i>0){e.preventDefault();i--;render()}});
+
+/* Drawers */
+function openD(id){var d=$id(id);if(d&&!d.open&&d.showModal)d.showModal()}
+$id("openTerms").onclick=function(){openD("terms")};
+$id("openTerms2").onclick=function(){openD("terms")};
+$id("openTopics").onclick=function(){openD("topics");var c=document.querySelector('#dlgList .tp[aria-current="true"]');if(c)c.focus()};
+document.querySelectorAll("dialog").forEach(function(d){d.addEventListener("click",function(e){if(e.target===d||(e.target.closest&&e.target.closest("[data-close]")))d.close()})});
+(function(){
+var $=function(i){return document.getElementById("d"+i)};
+var SQ=[[-1,-1],[-1,0],[-1,1],[0,-1],[0,0],[0,1],[1,-1],[1,0],[1,1]],CR=[[-1,0],[0,-1],[0,0],[0,1],[1,0]],LN=[[0,-1],[0,0],[0,1]];
+var A=[[0,0,0,0,0,0,0],[0,1,1,1,0,0,0],[0,1,1,1,0,0,0],[0,1,1,1,1,1,0],[0,0,0,1,1,1,0],[0,0,0,0,0,0,0],[0,0,0,0,0,1,0]];
+var R=[[0,0,0,0,0,0,0],[0,1,1,1,1,1,0],[0,1,0,0,0,1,0],[0,1,0,0,0,1,0],[0,1,1,1,1,1,0],[0,0,0,0,0,0,0],[0,0,0,0,0,0,0]];
+var RT=[];for(var r=0;r<7;r++){RT.push([]);for(var c=0;c<11;c++)RT[r].push(r>=1&&r<=5&&c>=1&&c<=9?1:0)}
+var IMB={a:["Handout image A (7 × 7)",A],r:["Ring with a hole (7 × 7)",R],t:["Rectangle (7 × 11)",RT]};
+var IMG={g1:["Bright spike on a sloping background",[[50,52,54,90,58,60,60]]],g2:["Dark spot on a sloping background",[[52,52,54,20,58,60,60]]]};
+var OPS=[["dil","Dilation"],["ero","Erosion"],["open","Opening (erode, then dilate)"],["close","Closing (dilate, then erode)"],["bnd","Boundary extraction (A − erosion)"],["fill","Hole filling"],["skel","Skeleton"],["top","Top-hat (grey row)"],["black","Black-hat (grey row)"]];
+var DEF={dil:"a",ero:"a",open:"a",close:"a",bnd:"a",fill:"r",skel:"t",top:"g1",black:"g2"};
+function gv(g,r,c,grey){var H=g.length,W=g[0].length;if(r<0||c<0||r>=H||c>=W){if(!grey)return 0;r=Math.min(H-1,Math.max(0,r));c=Math.min(W-1,Math.max(0,c))}return g[r][c]}
+function slide(I,m,se,grey){return I.map(function(row,r){return row.map(function(_,c){var v=se.map(function(o){return gv(I,r+o[0],c+o[1],grey)});return m=="d"?Math.max.apply(0,v):Math.min.apply(0,v)})})}
+function sub(a,b){return a.map(function(row,r){return row.map(function(v,c){return Math.max(0,v-b[r][c])})})}
+function cnt(g){var n=0;g.forEach(function(r){r.forEach(function(v){if(v)n++})});return n}
+function same(a,b){return JSON.stringify(a)==JSON.stringify(b)}
+var stages=[],steps=[],n=0,timer=null,grey=false,se=SQ;
+function mkS(I,m,nm,tx){return{t:"s",m:m,I:I,O:slide(I,m,se,grey),nm:nm,tx:tx}}
+var DT=["Dilation: if the SE <b>hits</b> the object (at least one 1 under it) the output is 1. Objects grow and small gaps fill in.","Erosion: if the SE <b>fits</b> completely inside the object (all 1s under it) the output is 1. Objects shrink and specks vanish."];
+var GT=["Grey dilation: the output is the <b>largest</b> value under the SE. Bright spots spread, dark dips fill in.","Grey erosion: the output is the <b>smallest</b> value under the SE. Bright spikes narrower than the SE disappear."];
+var GROUPS=[["Basic",["dil","ero"]],["Combined",["open","close"]],["Shapes",["bnd","fill","skel"]],["Grey rows",["top","black"]]];
+var SHORT={dil:"Dilation",ero:"Erosion",open:"Opening",close:"Closing",bnd:"Boundary",fill:"Hole filling",skel:"Skeleton",top:"Top-hat",black:"Black-hat"};
+var LONG={};OPS.forEach(function(o){LONG[o[0]]=o[1]});
+var op="dil",imk="a",sePref="sq",bid=0,shown="",prevRC=null,lastFit=null;
+$("op").innerHTML=GROUPS.map(function(g){return'<div class="cg"><span class="cgl">'+g[0]+'</span><div class="chips">'+g[1].map(function(v){return'<label class="chip"><input type="radio" name="dop" value="'+v+'"><span>'+SHORT[v]+"</span></label>"}).join("")+"</div></div>"}).join("");
+function isGrey(){return op=="top"||op=="black"}
+function syncOp(){document.querySelectorAll('input[name="dop"]').forEach(function(r){r.checked=r.value===op});$("opd").textContent=LONG[op]!==SHORT[op]?LONG[op]:""}
+function fillIm(){var g=isGrey(),L=g?IMG:IMB;if(!L[imk])imk=DEF[op];var ks=g?[imk]:Object.keys(L);
+ $("im").innerHTML=ks.map(function(k){return'<label class="chip"><input type="radio" name="dim" value="'+k+'"'+(k===imk?" checked":"")+(g?" disabled":"")+"><span>"+L[k][0]+"</span></label>"}).join("")+(g?'<span class="hint">Set by this operation</span>':"")}
+function glyph(s){var on={};s.forEach(function(o){on[o[0]+","+o[1]]=1});var h='<span class="sg" aria-hidden="true">';for(var r=-1;r<=1;r++)for(var c=-1;c<=1;c++)h+="<i"+(on[r+","+c]?' class="on"':"")+"></i>";return h+"</span>"}
+function fillSE(){var g=isGrey(),lock=g||op=="fill"||op=="skel",eff=g?"ln":lock?"cr":sePref,L=g?[["ln","1 × 3 line",LN]]:[["sq","3 × 3 square",SQ],["cr","3 × 3 cross",CR]];
+ $("se").innerHTML=L.map(function(o){return'<label><input type="radio" name="dse" value="'+o[0]+'"'+(o[0]===eff?" checked":"")+(lock?" disabled":"")+"><span>"+glyph(o[2])+o[1]+"</span></label>"}).join("");
+ $("seh").textContent=lock?"Set by this operation":""}
+$("op").addEventListener("change",function(e){if(e.target.name!=="dop")return;op=e.target.value;imk=DEF[op];syncOp();fillIm();fillSE();build()});
+$("im").addEventListener("change",function(e){imk=e.target.value;build()});
+$("se").addEventListener("change",function(e){sePref=e.target.value;build()});
+function sshort(st){var m=st.nm.match(/: ([^(]+)/),x=(m?m[1]:st.nm).trim();return x.charAt(0).toUpperCase()+x.slice(1)}
+function paintStages(){$("stages").innerHTML=stages.map(function(st,j){var nm=esc(sshort(st));return(j?'<span class="sep" aria-hidden="true">'+ic("r",14)+"</span>":"")+'<button type="button" class="stg" data-j="'+j+'" aria-label="Stage '+(j+1)+" of "+stages.length+": "+nm+'"><b>'+(j+1)+"</b>"+nm+"</button>"}).join("")}
+function markStages(cs){$("stages").querySelectorAll(".stg").forEach(function(b,j){b.classList.toggle("done",j<cs);if(j===cs)b.setAttribute("aria-current","step");else b.removeAttribute("aria-current");b.firstChild.innerHTML=j<cs?ic("check",13):String(j+1)})}
+$("stages").addEventListener("click",function(e){var b=e.target.closest(".stg");if(!b)return;stop();var j=+b.getAttribute("data-j");for(var q=0;q<steps.length;q++)if(steps[q][0]===j){n=q;break}render()});
+function build(){grey=isGrey();se=grey?LN:(op=="fill"||op=="skel"?CR:(sePref=="sq"?SQ:CR));
+var img=(grey?IMG:IMB)[imk][1].map(function(r){return r.slice()});
+var t=grey?GT:DT,D=t[0],E=t[1];stages=[];
+function s(I,m,nm){return mkS(I,m,nm,m=="d"?D:E)}
+var a;
+if(op=="dil")stages.push(s(img,"d","Dilation"));
+else if(op=="ero")stages.push(s(img,"e","Erosion"));
+else if(op=="open"){a=s(img,"e","Opening, part 1 of 2: erosion");stages.push(a,s(a.O,"d","Opening, part 2 of 2: dilation of the eroded image"))}
+else if(op=="close"){a=s(img,"d","Closing, part 1 of 2: dilation");stages.push(a,s(a.O,"e","Closing, part 2 of 2: erosion of the dilated image"))}
+else if(op=="bnd"){a=s(img,"e","Boundary, part 1 of 2: erosion");stages.push(a,{t:"u",nm:"Boundary, part 2 of 2: subtract",A:img,B:a.O,la:"A (original)",lb:"A ⊖ B (eroded)",lr:"β(A) = A − (A ⊖ B)",tx:"Erosion removed one outer layer. Subtracting it from the original leaves only that layer: the boundary."})}
+else if(op=="top"){a=s(img,"e","Top-hat, part 1 of 3: erosion");var b=s(a.O,"d","Top-hat, part 2 of 3: dilation (erosion + dilation = opening)");stages.push(a,b,{t:"u",nm:"Top-hat, part 3 of 3: image − opening",A:img,B:b.O,la:"Image f",lb:"Opening of f",lr:"Top-hat = f − opening",tx:"The opening removed the small bright spike and kept the slowly changing background. Subtracting leaves only the spike.",grey:1})}
+else if(op=="black"){a=s(img,"d","Black-hat, part 1 of 3: dilation");var b2=s(a.O,"e","Black-hat, part 2 of 3: erosion (dilation + erosion = closing)");stages.push(a,b2,{t:"u",nm:"Black-hat, part 3 of 3: closing − image",A:b2.O,B:img,la:"Closing of g",lb:"Image g",lr:"Black-hat = closing − g",tx:"The closing filled the small dark spot. Subtracting the image leaves only the dark spot.",grey:1})}
+else if(op=="fill"){var F=img.map(function(r){return r.map(function(){return 0})});F[0][0]=1;var Fs=[F];
+for(var k=0;k<40;k++){var N=slide(Fs[k],"d",CR,false).map(function(r,i){return r.map(function(v,j){return v&&!img[i][j]?1:0})});if(same(N,Fs[k]))break;Fs.push(N)}
+stages.push({t:"f",nm:"Hole filling by flooding the background",A:img,Fs:Fs})}
+else{var cur=img,sk=img.map(function(r){return r.map(function(){return 0})}),rd=[];
+for(var q=0;q<30&&cnt(cur);q++){var op1=slide(slide(cur,"e",CR,false),"d",CR,false),pc=sub(cur,op1);sk=sk.map(function(r,i){return r.map(function(v,j){return v||pc[i][j]?1:0})});rd.push({cur:cur,op:op1,pc:pc,sk:sk});cur=slide(cur,"e",CR,false)}
+stages.push({t:"k",nm:"Skeleton by repeated erosion and opening",rd:rd})}
+steps=[];stages.forEach(function(st,i){var m=st.t=="s"?st.I.length*st.I[0].length:st.t=="u"?1:st.t=="f"?st.Fs.length+1:st.rd.length+1;for(var k=0;k<m;k++)steps.push([i,k])});
+n=0;bid++;shown="";stop();paintStages();$("scrub").max=Math.max(0,steps.length-1);render()}
+function gsty(q){return"background:rgb("+q+","+q+","+q+");border-color:transparent;color:"+(q>=118?"#000":"#fff")}
+function gcell(v,gr,hid){if(hid)return'<i class="h"></i>';if(gr)return'<i style="'+gsty(v*2.2|0)+'">'+v+"</i>";return"<i"+(v?' class="one"':"")+">"+v+"</i>"}
+function bbox(s){var a=[0,0,0,0];s.forEach(function(x){a[0]=Math.min(a[0],x[0]);a[1]=Math.min(a[1],x[1]);a[2]=Math.max(a[2],x[0]);a[3]=Math.max(a[3],x[1])});return a}
+function ovHTML(s){var a=bbox(s),on={};s.forEach(function(x){on[x[0]+","+x[1]]=1});var h='<div class="se jump" id="dov" style="--sw:'+(a[3]-a[1]+1)+'" aria-hidden="true">';
+ for(var r=a[0];r<=a[2];r++)for(var c=a[1];c<=a[3];c++)h+=on[r+","+c]?'<b class="on'+(r||c?"":" ctr")+'" data-o="'+r+","+c+'"></b>':"<b></b>";return h+"</div>"}
+function grid(title,g,o){o=o||{};var h='<figure class="gp"><figcaption'+(o.cap?' id="d'+o.cap+'"':"")+">"+title+'</figcaption><div class="gw'+(o.pad?" pad":"")+(o.out?" out":"")+'"><div class="g" style="--w:'+g[0].length+'"'+(o.id?' id="d'+o.id+'"':"")+">";
+ g.forEach(function(row,r){row.forEach(function(v,c){h+=gcell(v,o.grey,o.hide&&o.hide(r,c))})});return h+"</div>"+(o.se?ovHTML(o.se):"")+"</div></figure>"}
+/* Pick the largest cell size that lets the panels sit side by side; stack them when the screen is too narrow. */
+function fit(np,cols){lastFit=[np,cols];var g=$("gr"),av=g.clientWidth||640,u=36;
+ for(var p=np;p>=1;p--){u=Math.floor((av-24*(p-1))/(p*cols));if(u>=30||p===1)break}
+ var stack=p===1&&np>1;g.classList.toggle("stack",stack);if(stack)u=Math.min(u,30);
+ var gap=u<28?2:3;g.style.setProperty("--cell",Math.max(16,Math.min(36,u-gap))+"px");g.style.setProperty("--gap",gap+"px")}
+window.addEventListener("resize",function(){if(lastFit)fit(lastFit[0],lastFit[1])});
+function mc(v,res){return'<i class="mc'+(res?" res":"")+(!grey&&v?" one":"")+'"'+(grey?' style="'+gsty(v*2.2|0)+'"':"")+">"+v+"</i>"}
+function render(){var sp=steps[n],st=stages[sp[0]],k=sp[1],tt=st.nm,tx="",key=bid+":"+sp[0];
+ if(st.t=="s"){var H=st.I.length,W=st.I[0].length,r=Math.floor(k/W),c=k%W;
+  if(shown!==key){$("gr").innerHTML=grid("Input",st.I,{pad:1,se:se,grey:grey,cap:"capin"})+grid("Output (fills in as the SE slides)",st.O,{pad:1,out:1,grey:grey,id:"gout",hide:function(){return true}});fit(2,W+2);shown=key;prevRC=null}
+  $("capin").textContent="Input: SE centred on row "+r+", column "+c;
+  var cells=$("gout").children;
+  for(var j=0;j<cells.length;j++){var e=cells[j],hid=j>k,want=hid?"h":"v";
+   if(e.getAttribute("data-s")!==want){var v=st.O[Math.floor(j/W)][j%W];
+    if(hid){e.className="h";e.removeAttribute("style");e.textContent=""}
+    else if(grey){e.className="";e.setAttribute("style",gsty(v*2.2|0));e.textContent=v}
+    else{e.className=v?"one":"";e.removeAttribute("style");e.textContent=v}
+    e.setAttribute("data-s",want)}
+   e.classList.toggle("cur",j===k)}
+  /* Glide one pixel along a row; jump without animation on a new row or a scrub. */
+  var ov=$("ov"),a=bbox(se),jump=reduced||!prevRC||prevRC[0]!==r||Math.abs(prevRC[1]-c)!==1;
+  ov.classList.toggle("jump",jump);ov.style.setProperty("--r",r+a[0]+1);ov.style.setProperty("--c",c+a[1]+1);
+  ov.querySelectorAll("b.on").forEach(function(b){var o=b.getAttribute("data-o").split(","),rr=r+(+o[0]),cc=c+(+o[1]);b.textContent=rr<0||cc<0||rr>=H||cc>=W?gv(st.I,rr,cc,grey):""});
+  prevRC=[r,c];
+  var vals=se.map(function(o){return gv(st.I,r+o[0],c+o[1],grey)}),out=st.O[r][c],m=st.m,q;
+  if(grey)q=(m=="d"?"The largest is ":"The smallest is ")+"<b>"+out+"</b>, so the output pixel is <b>"+out+"</b>.";
+  else if(m=="d")q=out?"At least one is 1, so the SE <b>hits</b> the object: output <b>1</b>.":"All are 0, so there is no hit: output <b>0</b>.";
+  else q=out?"All are 1, so the SE <b>fits</b>: output <b>1</b>.":"At least one is 0, so the SE does <b>not fit</b>: output <b>0</b>.";
+  tx="<p>"+st.tx+'</p><div class="calc"><span>Under the SE</span><span class="mini">'+vals.map(function(v){return mc(v)}).join("")+"</span><span>"+(grey?(m=="d"?"largest":"smallest"):(m=="d"?"any 1?":"all 1?"))+"</span>"+mc(out,1)+"</div><p>"+q+"</p>";
+  if(k==H*W-1)tx+="<p><b>This stage is finished.</b> "+(sp[0]<stages.length-1?"Press Play or the forward button to continue with the next part, which uses this output as its input.":"The output grid is the final result.")+"</p>"}
+ else{shown="";
+  if(st.t=="u"){$("gr").innerHTML=grid(st.la,st.A,{grey:st.grey})+grid(st.lb,st.B,{grey:st.grey})+grid(st.lr,sub(st.A,st.B),{grey:st.grey});fit(3,st.A[0].length);tx="<p>"+st.tx+"</p>"}
+  else if(st.t=="f"){var last=st.Fs.length,W2=st.A[0].length;
+   if(k<last){$("gr").innerHTML=grid("Original A (blue = object)",st.A)+grid("Flood from corner (0,0): round "+k,st.Fs[k]);fit(2,W2);
+    tx="<p>A <b>hole</b> is a black region the background cannot reach. We flood the background from the corner pixel (0,0) and grow it round by round: <span class='m'>F<sub>k</sub> = (F<sub>k−1</sub> ⊕ cross) ∩ not A</span>. The flood spreads only over black pixels and cannot cross the object.</p><p>Round "+k+": "+cnt(st.Fs[k])+" background pixel"+(cnt(st.Fs[k])==1?"":"s")+" reached.</p>"}
+   else{var F=st.Fs[last-1],res=st.A.map(function(r,i){return r.map(function(v,j){return v||!F[i][j]?1:0})}),add=cnt(res)-cnt(st.A);
+    $("gr").innerHTML=grid("Original A",st.A)+grid("Flood (final)",F)+grid("Filled = A or (not flood)",res);fit(3,W2);
+    tx="<p>The flood stopped growing. Black pixels it never reached must be holes, so we add them to the object: <span class='m'>filled = A OR NOT flood</span>. "+(add?"<b>"+add+"</b> hole pixel"+(add==1?" was":"s were")+" added, so the object is now solid.":"This image has no holes, so nothing changed.")+"</p>"}}
+  else{var L=st.rd.length,W3=st.rd[0].cur[0].length;
+   if(k<L){var d=st.rd[k];$("gr").innerHTML=grid("Current image (round "+(k+1)+")",d.cur)+grid("Its opening (cross SE)",d.op)+grid("Piece = current − opening",d.pc)+grid("Skeleton so far",d.sk);fit(4,W3);
+    tx="<p>Each round: (1) open the current image, (2) the pixels the opening removed are this round's skeleton piece ("+cnt(d.pc)+" pixel"+(cnt(d.pc)==1?"":"s")+"), (3) add them to the skeleton, (4) erode the current image by one layer and repeat until nothing is left.</p>"}
+   else{$("gr").innerHTML=grid("Original shape",st.rd[0].cur)+grid("Skeleton = union of all the pieces",st.rd[L-1].sk);fit(2,W3);
+    tx="<p>After "+L+" rounds the image is empty. The collected pieces form the skeleton: a thin centre line that keeps the shape's structure.</p>"}}}
+ $("p").innerHTML="<h3>"+tt+"</h3>"+tx;
+ $("cnt").textContent="Step "+(n+1)+" of "+steps.length;
+ var sc=$("scrub");sc.value=n;setFill(sc);sc.setAttribute("aria-valuetext","Step "+(n+1)+" of "+steps.length+": "+sshort(st));
+ markStages(sp[0]);
+ $("back").disabled=n==0;$("reset").disabled=n==0;$("step").disabled=n==steps.length-1}
+function setFill(el){var mn=+el.min||0,mx=+el.max||0;el.style.setProperty("--fill",(mx>mn?(el.value-mn)/(mx-mn)*100:0)+"%")}
+function iv(){return 980-(+$("spd").value)}
+function setSlide(){$("gr").style.setProperty("--slide",Math.min(240,Math.round(iv()*.6))+"ms")}
+function setPlay(on){$("play").innerHTML=ic(on?"pause":"play")+'<span class="lbl">'+(on?"Pause":"Play")+"</span>";$("play").setAttribute("aria-label",on?"Pause":"Play");$("p").setAttribute("aria-live",on?"off":"polite")}
+function stop(){if(timer){clearInterval(timer);timer=null}setPlay(false)}
+function fwd(){if(n<steps.length-1){n++;render()}else stop()}
+$("play").onclick=function(){if(timer){stop();return}if(n>=steps.length-1){n=0;render()}setPlay(true);timer=setInterval(fwd,iv())};
+$("spd").addEventListener("input",function(){setFill(this);setSlide();if(timer){clearInterval(timer);timer=setInterval(fwd,iv())}});
+$("step").onclick=function(){stop();fwd()};
+$("back").onclick=function(){stop();if(n>0){n--;render()}};
+$("reset").onclick=function(){stop();n=0;render()};
+$("scrub").addEventListener("input",function(){stop();n=+this.value;render()});
+document.addEventListener("visibilitychange",function(){if(document.hidden)stop()});
+document.getElementById("demo").addEventListener("keydown",function(e){if(e.altKey||e.ctrlKey||e.metaKey||e.shiftKey)return;var tg=e.target.tagName;if(tg==="INPUT"||tg==="SELECT"||tg==="TEXTAREA")return;
+ if(e.key==="ArrowRight"){e.preventDefault();if(n<steps.length-1){stop();fwd()}}else if(e.key==="ArrowLeft"){e.preventDefault();if(n>0){stop();n--;render()}}});
+window.syncDemo=function(name){var map={"H4 · Dilation and erosion":"dil","H4 · Opening and closing":"open","H4 · Boundary extraction":"bnd","H4 · Hole filling and the coin pipeline":"fill","H4 · Top-hat and black-hat":"top","H4 · Skeleton":"skel"};
+ var show=name.indexOf("H4")===0;document.getElementById("demo").hidden=!show;if(!show){stop();return}
+ if(map[name]){op=map[name];imk=DEF[op];syncOp();fillIm();fillSE();build()}else if(lastFit)fit(lastFit[0],lastFit[1])};
+setFill($("spd"));setSlide();syncOp();fillIm();fillSE();build();
+})();
+paintList();render();window.syncDemo(T[cur].n);
+</script>
+</body>
+</html>

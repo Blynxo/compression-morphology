@@ -1,6 +1,6 @@
 # Compression and morphology, step by step
 
-Worked examples from Handout 3 (image compression) and Handout 4 (morphology), filled in one step at a time, with an animated structuring-element demo. Formulas are typeset the way a textbook prints them, and each calculation plays out: the working first, then the answer.
+Worked examples from Handout 3 (image compression) and Handout 4 (morphology), filled in one step at a time, with an animated structuring-element demo. Formulas are typeset the way a textbook prints them, and each calculation plays out in its own box: the working line by line, then the answer.
 
 **Open it:** https://blynxo.github.io/compression-morphology/
 

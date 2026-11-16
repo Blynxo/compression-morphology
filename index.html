@@ -500,6 +500,17 @@ math{font-family:"Cambria Math","STIX Two Math","STIXTwoMath-Regular","Noto Sans
 .sheet math{font-size:1em}
 @media (max-width:440px){m.sm math{font-size:.74em}}
 code{padding:1px 5px;border-radius:5px;background:var(--soft);font-family:var(--mono);font-size:.88em}
+/* Worked calculations play out like board work: the expression, then each "= ..." step, then the answer,
+   which arrives in the accent colour and settles to ink. Purpose: the reader sees the working before the result. */
+.sk-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.btn.mini{min-height:32px;padding:0 10px;gap:6px;font-size:.82rem;color:var(--mute)}
+@media (pointer:coarse){.btn.mini{min-height:44px}}
+.cv{animation:calcIn .42s var(--ease-out) both}
+.cv.ca{animation:calcAns 1.3s var(--ease-out) both}
+.g i.cv2,.mc.cv2{animation:fillIn .35s var(--ease-out) both}
+@keyframes calcIn{from{opacity:0;transform:translateY(.3em)}}
+@keyframes calcAns{0%{opacity:0;transform:translateY(.3em);color:var(--acc)}30%{opacity:1;transform:none;color:var(--acc)}100%{color:var(--ink)}}
+@keyframes fillIn{from{background-color:transparent;border-color:var(--line);color:transparent}}
 
 /* Worksheet table */
 .sheet{margin:0 0 14px;overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:12px;-webkit-overflow-scrolling:touch}
@@ -639,6 +650,7 @@ dialog::backdrop{background:rgb(10 12 18/.5)}
  .btn:active:not(:disabled){transform:none}
  input[type=range]:active::-webkit-slider-thumb{transform:none}
  .dot[aria-current="step"]::before{transition:background-color .2s ease}
+ .cv,.cv.ca,.g i.cv2,.mc.cv2{animation:none}
 }
 </style>
 </head>
@@ -670,7 +682,7 @@ dialog::backdrop{background:rgb(10 12 18/.5)}
    <div class="concept" id="w"></div>
    <div class="given" id="g"></div>
    <div class="sheet" role="region" aria-label="Worksheet" tabindex="0"><table id="t"></table></div>
-   <div class="step" id="p" aria-live="polite"><p class="k" id="sk"></p><h3 id="sh"></h3><div id="sx"></div></div>
+   <div class="step" id="p"><div class="sk-row"><p class="k" id="sk"></p><button type="button" class="btn ghost mini" id="replay" hidden></button></div><div aria-live="polite"><h3 id="sh"></h3><div id="sx"></div></div></div>
    <div class="dock" role="group" aria-label="Steps">
     <button type="button" class="btn icon" id="prev" aria-label="Previous step" data-tip="Previous step" data-ic="l"></button>
     <div class="track"><div class="dots" id="dots"></div><p class="cnt" id="cnt"></p></div>
@@ -804,7 +816,7 @@ s:[["The blank worksheet","<p>For lossy methods we report size and quality toget
 h:["Symbol","Probability (sorted)","Reduction 1","Reduction 2","Reduction 3","Reduction 4","Code"],
 r:[[R`<m>a_2</m>`,"0.4@1","0.4@2","0.4@3","0.4@4","0.6@5","1@6"],[R`<m>a_6</m>`,"0.3@1","0.3@2","0.3@3","0.3@4","0.4@5","00@6"],[R`<m>a_1</m>`,"0.1@1","0.1@2","0.2@3","0.3@4","","011@6"],[R`<m>a_4</m>`,"0.1@1","0.1@2","0.1@3","","","0100@6"],[R`<m>a_3</m>`,"0.06@1","0.1@2","","","","01010@6"],[R`<m>a_5</m>`,"0.04@1","","","","","01011@6"],["Average length","","","","","",R`<m>L = 2.2</m> bits@7`]],
 s:[["The blank worksheet","<p>Each row is a symbol. The columns are the working: first the <b>probabilities</b> (sorted from largest to smallest), then four <b>source reduction</b> columns. In source reduction you add the two smallest values into one, rewrite the list in sorted order, and repeat until only <b>two values are left</b>. Then you go backwards and assign 0s and 1s to get the codes.</p><p>Why this works: values that are merged first are the rarest, so they end up with the longest codes. Values merged last are the commonest, so they end up with the shortest codes.</p>"],
-["Step 1: probabilities",R`<p>First count the total number of pixels: <m>N = \text{width} \times \text{height} = 10 \times 10 = 100</m>. The six frequencies must add up to <m>N</m>: <m>40 + 30 + 10 + 10 + 6 + 4 = 100</m>.</p><p>The probability of a symbol is its frequency divided by <m>N</m>, for example</p><m d>P(a_2) = \frac{40}{100} = 0.4</m><p>which means 40% of the pixels are <m>a_2</m>. In the same way <m>P(a_6) = 0.3</m>, <m>P(a_1) = P(a_4) = 0.1</m>, <m>P(a_3) = 0.06</m> and <m>P(a_5) = 0.04</m>. They add up to 1. Write them from largest to smallest (sorted).</p>`],
+["Step 1: probabilities",R`<p>First count the total number of pixels: <m>N = \text{width} \times \text{height} = 10 \times 10 = 100</m>. The six frequencies must add up to <m>N</m>: <m>40 + 30 + 10 + 10 + 6 + 4 = 100</m>.</p><p>The probability of a symbol is its frequency divided by <m>N</m>, for example</p><m d>P(a_2) = \frac{40}{100} = 0.4</m><p>which means 40% of the pixels are <m>a_2</m>. In the same way <m>P(a_6) = 0.3</m>, <m static>P(a_1) = P(a_4) = 0.1</m>, <m>P(a_3) = 0.06</m> and <m>P(a_5) = 0.04</m>. They add up to 1. Write them from largest to smallest (sorted).</p>`],
 ["Step 2: reduction 1",R`<p>Take the <b>two smallest</b> probabilities: <m>a_3</m> (0.06) and <m>a_5</m> (0.04). Add them: <m>0.06 + 0.04 = 0.1</m>. This new value stands for "<m>a_3</m> or <m>a_5</m>". Copy all other values unchanged (0.4, 0.3, 0.1, 0.1). The list now has 5 values, and it is still sorted.</p>`],
 ["Step 3: reduction 2",R`<p>Add the two smallest of column 1, 0.1 (from <m>a_4</m>) and 0.1 (from <m>a_3</m> or <m>a_5</m>): <m>0.1 + 0.1 = 0.2</m>. Re-sort: 0.4, 0.3, 0.2, 0.1 (the 0.1 is <m>a_1</m>).</p>`],
 ["Step 4: reduction 3",R`<p><m>0.2 + 0.1 = 0.3</m>. Column 3: 0.4, 0.3, 0.3.</p>`],
@@ -917,7 +929,7 @@ s:[["The blank worksheet","<p>Raw thresholding is never enough. Each morphologic
 ["Step 1: plain Otsu","<p>94 components for 24 coins (8-connectivity).</p>"],
 ["Step 2: top-hat",R`<p>Image minus its opening, <m>f - (f \circ b)</m>, removes the bright glare, leaving 52 pieces.</p>`],
 ["Step 3: closing",R`<p>Closing <m>A \bullet B</m> (dilate, then erode) joins the broken pieces: 27 objects.</p>`],
-["Step 4: hole filling",R`<p>Flood-fill the background from corner <m>(0, 0)</m>, one ring of pixels per round:</p><m d>F_k = (F_{k-1} \oplus B) \cap A^{c}, \qquad k = 1, 2, 3, \dots</m><p>Any black pixel the flood never reaches must be a hole, so OR those pixels into the object: <m>A \cup F^{c}</m>. This needs the corner to be background. The count stays 27, but every coin is solid, so area measurements are correct.</p>`],
+["Step 4: hole filling",R`<p>Flood-fill the background from corner <m>(0, 0)</m>, one ring of pixels per round:</p><m d static>F_k = (F_{k-1} \oplus B) \cap A^{c}, \qquad k = 1, 2, 3, \dots</m><p>Any black pixel the flood never reaches must be a hole, so OR those pixels into the object: <m>A \cup F^{c}</m>. This needs the corner to be background. The count stays 27, but every coin is solid, so area measurements are correct.</p>`],
 ["Step 5: opening",R`<p>Opening <m>A \circ B</m> removes the last 3 specks: exactly <b>24 objects</b>.</p>`]]},
 
 {n:"H4 · Top-hat and black-hat",g:R`One row of grey values with a bright spike at <m>x = 3</m>. SE <m>b</m>: width 3, edge pixels repeated at the border.`,
@@ -991,6 +1003,37 @@ function typeset(root){if(!root||!window.temml)return;
   if(MC[k])el.innerHTML=MC[k]})}
 typeset($id("terms"));
 
+/* Worked calculations in the step box play out like board work. Each equation is split at its relations
+   (=, ≈, →): the expression shows first, every later "= ..." part follows CSTEP ms apart, and the answer
+   comes last. Only equations whose last part is a number animate, so definitions stay still.
+   Multi-line working (aligned) is revealed line by line. <m static> opts an equation out. */
+var CSTEP=650,animNext=false,calcT=null;
+function flat(n){var o=[];[].forEach.call(n.children,function(c){if(/^(mrow|mstyle|mpadded)$/.test(c.localName))o=o.concat(flat(c));else o.push(c)});return o}
+function isRel(n){return n.localName==="mo"&&/^[=≈→]$/.test(n.textContent.trim())}
+function baseOf(n){while(n&&/^(msub|msup|msubsup|munder|mover|munderover)$/.test(n.localName))n=n.firstElementChild;return n}
+function hasOp(list){return list.some(function(n){if(n.localName==="mfrac")return true;var b=baseOf(n),t=b?b.textContent.trim():"";
+ return !!b&&(((b.localName==="mo"||b.localName==="mi")&&/^[+−×·÷\/∕∑⋃∪∩⊕⊖∘•]$/.test(t))||(b.localName==="mi"&&/^(log|min|max|round)$/.test(t)))})}
+function calcPlan(math){var top=flat(math),lines=[];
+ if(top.length===1&&top[0].localName==="mtable")[].forEach.call(top[0].children,function(tr){var td=tr.children;for(var c=0;c<td.length;c+=2)lines.push(flat(td[c]).concat(td[c+1]?flat(td[c+1]):[]))});
+ else lines.push(top);
+ var plan=[],s=0;
+ lines.forEach(function(L,li){if(li>0)s++;var f=-1;for(var i=0;i<L.length;i++)if(isRel(L[i])){f=i;break}
+  var merge=f===0||(f>0&&!hasOp(L.slice(0,f)));   /* "C = 262144/32768" stays together; "0.06 + 0.04" shows before "= 0.1" */
+  L.forEach(function(n,i){if(i>0&&isRel(n)&&!(i===f&&merge))s++;plan.push([n,s])})});
+ return s>0&&plan.some(function(p){return p[1]===s&&p[0].localName==="mn"})?{plan:plan,n:s}:null}
+function calcEqs(){var out=[];$id("sx").querySelectorAll("m:not([static])").forEach(function(m){var x=m.querySelector("math"),P=x&&calcPlan(x);if(P)out.push(P)});return out}
+function runCalc(eqs){var off=0;
+ eqs.forEach(function(P){P.plan.forEach(function(p){if(!p[1])return;var e=p[0];e.classList.add("cv");if(p[1]===P.n)e.classList.add("ca");e.style.animationDelay=((off+p[1])*CSTEP)+"ms"});off+=P.n});
+ var total=off*CSTEP;
+ $id("t").querySelectorAll("td.new>span").forEach(function(s){s.style.animationDelay=(total+250)+"ms"});  /* the worksheet fills in after the answer */
+ return total}
+var rb=$id("replay");
+function setRe(st){if(!st){rb.hidden=true;return}rb.hidden=false;rb.setAttribute("data-state",st);
+ rb.innerHTML=st==="run"?ic("fwd",16)+"<span>Show answer</span>":ic("restart",16)+"<span>Replay</span>"}
+function finishCalc(){clearTimeout(calcT);$id("lesson").querySelectorAll(".cv").forEach(function(e){e.classList.remove("cv","ca");e.style.animationDelay=""});
+ $id("t").querySelectorAll("td.new>span").forEach(function(s){s.style.animationDelay=""});setRe("done")}
+rb.onclick=function(){if(rb.getAttribute("data-state")==="run")finishCalc();else{animNext=true;render()}};
+
 /* Theme: Match my system / Light / Dark, remembered in this browser */
 (function(){var t=store.get("theme","auto");if(t!=="light"&&t!=="dark")t="auto";
  document.querySelectorAll('input[name="theme"]').forEach(function(r){r.checked=r.value===t;
@@ -1053,18 +1096,22 @@ function render(){
  else if(cur<T.length-1){var nx=tname(T[cur+1]);nb.setAttribute("data-mode","topic");nb.innerHTML='<span class="lbl">Next topic</span>'+ic("r");nb.setAttribute("data-tip",nx);nb.setAttribute("aria-label","Next topic: "+nx);nb.disabled=false}
  else{nb.setAttribute("data-mode","");nb.innerHTML='<span class="lbl">All topics done</span>'+ic("check");nb.removeAttribute("data-tip");nb.removeAttribute("aria-label");nb.disabled=true}
  typeset($id("lesson"));
+ clearTimeout(calcT);var eqs=calcEqs();
+ if(eqs.length&&!reduced){if(animNext){var tot=runCalc(eqs);setRe("run");calcT=setTimeout(function(){setRe("done")},tot+900)}else setRe("done")}
+ else setRe("");
+ animNext=false;
 }
-$id("next").onclick=function(){var m=this.getAttribute("data-mode");if(m==="step"){i++;render()}else if(m==="topic")go(cur+1)};
+$id("next").onclick=function(){var m=this.getAttribute("data-mode");if(m==="step"){animNext=true;i++;render()}else if(m==="topic")go(cur+1)};
 $id("prev").onclick=function(){if(i>0){i--;render()}};
 $id("reset").onclick=function(){i=0;render()};
-$id("dots").onclick=function(e){var b=e.target.closest(".dot");if(b){i=+b.getAttribute("data-s");render()}};
+$id("dots").onclick=function(e){var b=e.target.closest(".dot");if(b){var t=+b.getAttribute("data-s");animNext=t>i;i=t;render()}};
 document.addEventListener("keydown",function(e){
  if(e.defaultPrevented||e.altKey||e.ctrlKey||e.metaKey||e.shiftKey)return;
  var el=e.target,tg=el.tagName;
  if(tg==="INPUT"||tg==="SELECT"||tg==="TEXTAREA"||el.isContentEditable)return;
  if(document.querySelector("dialog[open]"))return;
  if(el.closest&&(el.closest("#demo")||el.closest(".sheet")))return;
- if(e.key==="ArrowRight"&&i<T[cur].s.length-1){e.preventDefault();i++;render()}
+ if(e.key==="ArrowRight"&&i<T[cur].s.length-1){e.preventDefault();animNext=true;i++;render()}
  else if(e.key==="ArrowLeft"&&i>0){e.preventDefault();i--;render()}});
 
 /* Drawers */
@@ -1133,44 +1180,52 @@ stages.push({t:"k",nm:"Skeleton by repeated erosion and opening",rd:rd})}
 steps=[];stages.forEach(function(st,i){var m=st.t=="s"?st.I.length*st.I[0].length:st.t=="u"?1:st.t=="f"?st.Fs.length+1:st.rd.length+1;for(var k=0;k<m;k++)steps.push([i,k])});
 n=0;bid++;shown="";stop();paintStages();$("scrub").max=Math.max(0,steps.length-1);render()}
 function gsty(q){return"background:rgb("+q+","+q+","+q+");border-color:transparent;color:"+(q>=118?"#000":"#fff")}
-function gcell(v,gr,hid){if(hid)return'<i class="h"></i>';if(gr)return'<i style="'+gsty(v*2.2|0)+'">'+v+"</i>";return"<i"+(v?' class="one"':"")+">"+v+"</i>"}
+function gcell(v,gr,hid,dl){if(hid)return'<i class="h"></i>';
+ var c=((gr||!v)?"":"one")+(dl!=null?" cv2":""),s=(gr?gsty(v*2.2|0)+";":"")+(dl!=null?"animation-delay:"+dl+"ms":"");
+ return"<i"+(c.trim()?' class="'+c.trim()+'"':"")+(s?' style="'+s+'"':"")+">"+v+"</i>"}
 function bbox(s){var a=[0,0,0,0];s.forEach(function(x){a[0]=Math.min(a[0],x[0]);a[1]=Math.min(a[1],x[1]);a[2]=Math.max(a[2],x[0]);a[3]=Math.max(a[3],x[1])});return a}
 function ovHTML(s){var a=bbox(s),on={};s.forEach(function(x){on[x[0]+","+x[1]]=1});var h='<div class="se jump" id="dov" style="--sw:'+(a[3]-a[1]+1)+'" aria-hidden="true">';
  for(var r=a[0];r<=a[2];r++)for(var c=a[1];c<=a[3];c++)h+=on[r+","+c]?'<b class="on'+(r||c?"":" ctr")+'" data-o="'+r+","+c+'"></b>':"<b></b>";return h+"</div>"}
 function grid(title,g,o){o=o||{};var h='<figure class="gp"><figcaption'+(o.cap?' id="d'+o.cap+'"':"")+">"+title+'</figcaption><div class="gw'+(o.pad?" pad":"")+(o.out?" out":"")+'"><div class="g" style="--w:'+g[0].length+'"'+(o.id?' id="d'+o.id+'"':"")+">";
- g.forEach(function(row,r){row.forEach(function(v,c){h+=gcell(v,o.grey,o.hide&&o.hide(r,c))})});return h+"</div>"+(o.se?ovHTML(o.se):"")+"</div></figure>"}
+ g.forEach(function(row,r){row.forEach(function(v,c){h+=gcell(v,o.grey,o.hide&&o.hide(r,c),o.rv?380+(r*g[0].length+c)*22:null)})});return h+"</div>"+(o.se?ovHTML(o.se):"")+"</div></figure>"}
 /* Pick the largest cell size that lets the panels sit side by side; stack them when the screen is too narrow. */
 function fit(np,cols){lastFit=[np,cols];var g=$("gr"),av=g.clientWidth||640,u=36;
  for(var p=np;p>=1;p--){u=Math.floor((av-24*(p-1))/(p*cols));if(u>=30||p===1)break}
  var stack=p===1&&np>1;g.classList.toggle("stack",stack);if(stack)u=Math.min(u,30);
  var gap=u<28?2:3;g.style.setProperty("--cell",Math.max(16,Math.min(36,u-gap))+"px");g.style.setProperty("--gap",gap+"px")}
 window.addEventListener("resize",function(){if(lastFit)fit(lastFit[0],lastFit[1])});
-function mc(v,res){return'<i class="mc'+(res?" res":"")+(!grey&&v?" one":"")+'"'+(grey?' style="'+gsty(v*2.2|0)+'"':"")+">"+v+"</i>"}
+function mc(v,res,dl,pend){var s=(grey?gsty(v*2.2|0)+";":"")+(dl!=null?"animation-delay:"+dl+"ms":"");
+ return'<i class="mc'+(res?" res":"")+(!grey&&v?" one":"")+(dl!=null?(pend?" cv2":" cv"):"")+'"'+(s?' style="'+s+'"':"")+">"+v+"</i>"}
 function render(){var sp=steps[n],st=stages[sp[0]],k=sp[1],tt=st.nm,tx="",key=bid+":"+sp[0];
  if(st.t=="s"){var H=st.I.length,W=st.I[0].length,r=Math.floor(k/W),c=k%W;
   if(shown!==key){$("gr").innerHTML=grid("Input",st.I,{pad:1,se:se,grey:grey,cap:"capin"})+grid("Output (fills in as the SE slides)",st.O,{pad:1,out:1,grey:grey,id:"gout",hide:function(){return true}});fit(2,W+2);shown=key;prevRC=null}
   $("capin").textContent="Input: SE centred on row "+r+", column "+c;
+  /* Stepping by hand (or playing slowly): the values under the SE come in one by one, then the rule, then the
+     result tile and the output pixel fill in together. Playing fast skips this so the slide stays smooth. */
+  var vals=se.map(function(o){return gv(st.I,r+o[0],c+o[1],grey)}),out=st.O[r][c],m=st.m,q,
+      A=!reduced&&(!timer||iv()>=800),T0=vals.length*45,TR=T0+300,pc=$("gout").querySelector(".cv2");
+  if(pc){pc.classList.remove("cv2");pc.style.animationDelay=""}
   var cells=$("gout").children;
   for(var j=0;j<cells.length;j++){var e=cells[j],hid=j>k,want=hid?"h":"v";
    if(e.getAttribute("data-s")!==want){var v=st.O[Math.floor(j/W)][j%W];
     if(hid){e.className="h";e.removeAttribute("style");e.textContent=""}
     else if(grey){e.className="";e.setAttribute("style",gsty(v*2.2|0));e.textContent=v}
     else{e.className=v?"one":"";e.removeAttribute("style");e.textContent=v}
-    e.setAttribute("data-s",want)}
+    e.setAttribute("data-s",want);
+    if(!hid&&j===k&&A){e.classList.add("cv2");e.style.animationDelay=TR+"ms"}}
    e.classList.toggle("cur",j===k)}
   /* Glide one pixel along a row; jump without animation on a new row or a scrub. */
   var ov=$("ov"),a=bbox(se),jump=reduced||!prevRC||prevRC[0]!==r||Math.abs(prevRC[1]-c)!==1;
   ov.classList.toggle("jump",jump);ov.style.setProperty("--r",r+a[0]+1);ov.style.setProperty("--c",c+a[1]+1);
   ov.querySelectorAll("b.on").forEach(function(b){var o=b.getAttribute("data-o").split(","),rr=r+(+o[0]),cc=c+(+o[1]);b.textContent=rr<0||cc<0||rr>=H||cc>=W?gv(st.I,rr,cc,grey):""});
   prevRC=[r,c];
-  var vals=se.map(function(o){return gv(st.I,r+o[0],c+o[1],grey)}),out=st.O[r][c],m=st.m,q;
   if(grey)q=(m=="d"?"The largest is ":"The smallest is ")+"<b>"+out+"</b>, so the output pixel is <b>"+out+"</b>.";
   else if(m=="d")q=out?"At least one is 1, so the SE <b>hits</b> the object: output <b>1</b>.":"All are 0, so there is no hit: output <b>0</b>.";
   else q=out?"All are 1, so the SE <b>fits</b>: output <b>1</b>.":"At least one is 0, so the SE does <b>not fit</b>: output <b>0</b>.";
-  tx="<p>"+st.tx+'</p><div class="calc"><span>Under the SE</span><span class="mini">'+vals.map(function(v){return mc(v)}).join("")+"</span><span>"+(grey?(m=="d"?"largest":"smallest"):(m=="d"?"any 1?":"all 1?"))+"</span>"+mc(out,1)+"</div><p>"+q+"</p>";
+  tx="<p>"+st.tx+'</p><div class="calc"><span>Under the SE</span><span class="mini">'+vals.map(function(v,j){return mc(v,0,A?j*45:null)}).join("")+"</span><span"+(A?' class="cv" style="animation-delay:'+(T0+80)+'ms"':"")+">"+(grey?(m=="d"?"largest":"smallest"):(m=="d"?"any 1?":"all 1?"))+"</span>"+mc(out,1,A?TR:null,1)+"</div><p"+(A?' class="cv" style="animation-delay:'+(TR+250)+'ms"':"")+">"+q+"</p>";
   if(k==H*W-1)tx+="<p><b>This stage is finished.</b> "+(sp[0]<stages.length-1?"Press Play or the forward button to continue with the next part, which uses this output as its input.":"The output grid is the final result.")+"</p>"}
  else{shown="";
-  if(st.t=="u"){$("gr").innerHTML=grid(st.la,st.A,{grey:st.grey})+grid(st.lb,st.B,{grey:st.grey})+grid(st.lr,sub(st.A,st.B),{grey:st.grey});fit(3,st.A[0].length);tx="<p>"+st.tx+"</p>"}
+  if(st.t=="u"){$("gr").innerHTML=grid(st.la,st.A,{grey:st.grey})+grid(st.lb,st.B,{grey:st.grey})+grid(st.lr,sub(st.A,st.B),{grey:st.grey,rv:!reduced});fit(3,st.A[0].length);tx="<p>"+st.tx+"</p>"}
   else if(st.t=="f"){var last=st.Fs.length,W2=st.A[0].length;
    if(k<last){$("gr").innerHTML=grid("Original <m>A</m> (blue = object)",st.A)+grid("Flood <m>F_{"+k+"}</m> from corner <m>(0,0)</m>",st.Fs[k]);fit(2,W2);
     tx="<p>A <b>hole</b> is a black region the background cannot reach. We flood the background from the corner pixel <m>(0,0)</m> and grow it round by round with the cross SE <m>B</m>:</p><m d>F_k = (F_{k-1} \\oplus B) \\cap A^{c}</m><p>The flood spreads only over black pixels (<m>A^{c}</m>) and cannot cross the object.</p><p>Round "+k+": "+cnt(st.Fs[k])+" background pixel"+(cnt(st.Fs[k])==1?"":"s")+" reached.</p>"}
